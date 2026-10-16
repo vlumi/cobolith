@@ -76,6 +76,9 @@ const (
 // for new datasets, LRECL), to the job's output (Sysout), or to nothing
 // (Dummy: reads find no records, writes are discarded).
 //
+// DD * is InStream: the job's in-stream data, which Pangaea's jobs do not
+// carry in their text; whoever submits the job supplies it.
+//
 // RECORG=KS makes the dataset Indexed, a key-sequenced dataset whose
 // records a program reads and writes by key. Its record length is given as
 // LRECL=n, which a DD may also give instead of DCB=(RECFM=FB,LRECL=n).
@@ -99,6 +102,7 @@ type DD struct {
 	Indexed    bool
 	Sysout     bool
 	Dummy      bool
+	InStream   bool
 	Line       int
 	// Concatenated are the datasets read after this one.
 	Concatenated []DD
@@ -346,6 +350,8 @@ func parseDD(s statement) (DD, error) {
 			dd.Sysout = true
 		case "DUMMY":
 			dd.Dummy = true
+		case "*":
+			dd.InStream = true
 		default:
 			return DD{}, fmt.Errorf("DD %s: unknown operand %q", s.name, key)
 		}
@@ -374,15 +380,15 @@ func (dd *DD) setDSN(value string) error {
 
 func (dd DD) check() error {
 	targets := 0
-	for _, set := range []bool{dd.Sysout, dd.Dummy, dd.DSN != ""} {
+	for _, set := range []bool{dd.Sysout, dd.Dummy, dd.InStream, dd.DSN != ""} {
 		if set {
 			targets++
 		}
 	}
 	switch {
 	case targets != 1:
-		return fmt.Errorf("DD %s: needs exactly one of DSN, SYSOUT and DUMMY", dd.Name)
-	case dd.Sysout || dd.Dummy:
+		return fmt.Errorf("DD %s: needs exactly one of DSN, SYSOUT, DUMMY and *", dd.Name)
+	case dd.Sysout || dd.Dummy || dd.InStream:
 		return nil
 	case dd.Temporary && dd.Relative:
 		return fmt.Errorf("DD %s: a temporary dataset has no generations", dd.Name)

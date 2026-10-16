@@ -23,6 +23,9 @@ type Statement struct {
 	// Calls is the program a CALL calls, when it is named by a literal;
 	// a CALL through a data item reads the item instead.
 	Calls string
+	// Device is what an ACCEPT reads from or a DISPLAY writes to, as its
+	// FROM or UPON names it; empty for SYSIN and SYSOUT, the job's.
+	Device string
 	// Condition is what an IF tests, or the UNTIL of a PERFORM.
 	Condition *Condition
 	Branches  []Branch
@@ -69,11 +72,22 @@ type Operand struct {
 
 // Statement verbs that the parser knows.
 var verbs = map[string]bool{
-	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "DELETE": true, "REWRITE": true, "START": true, "COMPUTE": true, "CONTINUE": true, "DISPLAY": true,
-	"DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true, "GOBACK": true, "IF": true,
-	"INITIALIZE": true, "MOVE": true, "MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true,
-	"RELEASE": true, "RETURN": true, "SEARCH": true, "SET": true, "SORT": true, "STOP": true,
-	"STRING": true, "SUBTRACT": true, "WRITE": true,
+	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "COMPUTE": true, "CONTINUE": true,
+	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
+	"GOBACK": true, "IF": true, "INITIALIZE": true, "MOVE": true, "MULTIPLY": true, "OPEN": true,
+	"PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true, "REWRITE": true, "SEARCH": true,
+	"SET": true, "SORT": true, "START": true, "STOP": true, "STRING": true, "SUBTRACT": true,
+	"WRITE": true,
+}
+
+// terminators end the scope of a statement, such as END-IF. A data name
+// may also begin with END-, as END-OF-FILE does.
+var terminators = map[string]bool{
+	"END-ACCEPT": true, "END-ADD": true, "END-CALL": true, "END-COMPUTE": true, "END-DELETE": true,
+	"END-DISPLAY": true, "END-DIVIDE": true, "END-EVALUATE": true, "END-IF": true,
+	"END-MULTIPLY": true, "END-PERFORM": true, "END-READ": true, "END-RETURN": true,
+	"END-REWRITE": true, "END-SEARCH": true, "END-START": true, "END-STRING": true,
+	"END-SUBTRACT": true, "END-WRITE": true,
 }
 
 // keywords are reserved words that end an operand list.
@@ -94,7 +108,7 @@ var keywords = map[string]bool{
 }
 
 func isTerminator(t Token) bool {
-	return t.Kind == Word && strings.HasPrefix(t.Text, "END-")
+	return t.Kind == Word && terminators[t.Text]
 }
 
 // statementParser parses the statements of a paragraph body. Starts are
@@ -530,13 +544,17 @@ func (p *statementParser) display(s *Statement) error {
 		s.Reads = ops
 	}
 	if p.optional("UPON", "FROM") {
-		p.next()
+		s.Device = p.next().Text
+		p.optional("YYYYMMDD", "YYYYDDD")
 	}
 	if p.optional("WITH") {
 		p.optional("NO")
 		p.optional("ADVANCING")
 	}
-	return err
+	if err != nil || s.Verb != "ACCEPT" {
+		return err
+	}
+	return p.conditionalPhrases(s, "END-ACCEPT")
 }
 
 func (p *statementParser) ifStatement(s *Statement) error {

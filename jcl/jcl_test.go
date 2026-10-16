@@ -67,6 +67,7 @@ func TestParseErrors(t *testing.T) {
 		"bad generation":      "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A(X),DISP=SHR\n",
 		"temp generation":     "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=&&A(+1),DISP=SHR\n",
 		"dummy and DSN":       "//J JOB\n//S EXEC PGM=P\n//IN DD DUMMY,DSN=A,DISP=SHR\n",
+		"in-stream and DSN":   "//J JOB\n//S EXEC PGM=P\n//IN DD *,DSN=A,DISP=SHR\n",
 		"variable RECFM":      "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,DCB=(RECFM=VB,LRECL=80)\n",
 		"entry-sequenced":     "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,RECORG=ES,LRECL=80\n",
 		"bad LRECL":           "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,LRECL=0\n",
@@ -93,6 +94,7 @@ func TestParseDatasetKinds(t *testing.T) {
 //WORK DD DSN=&&SORTED,DISP=NEW,DCB=(RECFM=FB,LRECL=80)
 //LOG  DD DSN=TRAN.AUDIT(+1),DISP=MOD
 //NONE DD DUMMY
+//SYSIN DD *
 //KSDS DD DSN=ACCT.ONLINE(+1),DISP=NEW,RECORG=KS,LRECL=300
 `))
 	if err != nil {
@@ -104,7 +106,8 @@ func TestParseDatasetKinds(t *testing.T) {
 		{Name: "WORK", DSN: "SORTED", Temporary: true, Disp: New, LRECL: 80, Line: 5},
 		{Name: "LOG", DSN: "TRAN.AUDIT", Generation: 1, Relative: true, Disp: Mod, Line: 6},
 		{Name: "NONE", Dummy: true, Line: 7},
-		{Name: "KSDS", DSN: "ACCT.ONLINE", Generation: 1, Relative: true, Disp: New, LRECL: 300, Indexed: true, Line: 8},
+		{Name: "SYSIN", InStream: true, Line: 8},
+		{Name: "KSDS", DSN: "ACCT.ONLINE", Generation: 1, Relative: true, Disp: New, LRECL: 300, Indexed: true, Line: 9},
 	}
 	if !reflect.DeepEqual(job.Steps[0].DDs, want) {
 		t.Errorf("got  %+v\nwant %+v", job.Steps[0].DDs, want)

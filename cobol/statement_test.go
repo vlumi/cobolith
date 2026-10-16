@@ -27,6 +27,9 @@ func describe(b *strings.Builder, statements []Statement, indent string) {
 		if s.Calls != "" {
 			b.WriteString(" calls " + s.Calls)
 		}
+		if s.Device != "" {
+			b.WriteString(" device " + s.Device)
+		}
 		for _, list := range []struct {
 			label string
 			ops   []Operand
@@ -148,7 +151,13 @@ func TestIndexedAndCalls(t *testing.T) {
            CALL 'AUTHPUR' USING WS-REQUEST BY CONTENT WS-DATE
                ON EXCEPTION MOVE 'X' TO WS-STATUS
            END-CALL
-           CALL WS-PROGRAM USING BY REFERENCE WS-REQUEST.
+           CALL WS-PROGRAM USING BY REFERENCE WS-REQUEST
+           ACCEPT WS-REQUEST
+               ON EXCEPTION SET END-OF-INPUT TO TRUE
+               NOT ON EXCEPTION DISPLAY WS-REQUEST
+           END-ACCEPT
+           ACCEPT WS-DATE FROM DATE YYYYMMDD
+           DISPLAY 'NO REQUEST' UPON SYSERR.
 `
 	tokens, err := Lex("test", []byte(source))
 	if err != nil {
@@ -174,6 +183,13 @@ CALL calls AUTHPUR reads WS-REQUEST, WS-DATE writes WS-REQUEST
   ON EXCEPTION
     MOVE reads 'X' writes WS-STATUS
 CALL reads WS-PROGRAM, WS-REQUEST writes WS-REQUEST
+ACCEPT writes WS-REQUEST
+  ON EXCEPTION
+    SET writes END-OF-INPUT
+  NOT ON EXCEPTION
+    DISPLAY reads WS-REQUEST
+ACCEPT device DATE writes WS-DATE
+DISPLAY device SYSERR reads 'NO REQUEST'
 `
 	if got := b.String(); got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)

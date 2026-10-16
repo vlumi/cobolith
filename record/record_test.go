@@ -95,3 +95,37 @@ func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
 		t.Error("looked up FILLER, which TRAN-RECORD has three of")
 	}
 }
+
+func TestPackedDecimal(t *testing.T) {
+	l, err := FromCopybook("testdata/PACKED.cpy", nil, "PACKED-RECORD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := l.Blank()
+	if err := l.SetNumber(r, "PK-AMOUNT", -123456789); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.SetNumber(r, "PK-COUNT", 42); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmt.Sprintf("% X", r[:8]), "12 34 56 78 9D 00 04 2F"; got != want {
+		t.Errorf("packed % X, want %s", r[:8], want)
+	}
+	if n, err := l.Number(r, "PK-AMOUNT"); err != nil || n != -123456789 {
+		t.Errorf("amount %d, %v", n, err)
+	}
+	if n, err := l.Number(r, "PK-COUNT"); err != nil || n != 42 {
+		t.Errorf("count %d, %v", n, err)
+	}
+	if err := l.SetNumber(r, "PK-COUNT", 12345); err == nil {
+		t.Error("five digits fit in a four-digit field")
+	}
+	r[4] = 0x9A
+	if _, err := l.Number(r, "PK-AMOUNT"); err == nil {
+		t.Error("read a number without a sign")
+	}
+	r[0] = 0xA2
+	if _, err := l.Number(r, "PK-AMOUNT"); err == nil {
+		t.Error("read a digit above nine")
+	}
+}

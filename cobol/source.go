@@ -43,14 +43,26 @@ const (
 	Period             // the period that ends an entry, sentence or header
 	LParen
 	RParen
+	// CommentEntry is the free text of an identification paragraph such as
+	// AUTHOR or DATE-WRITTEN, which the compiler treats as a comment.
+	CommentEntry
 )
 
+// commentEntryParagraphs are the identification paragraphs whose text is a
+// comment entry.
+var commentEntryParagraphs = map[string]bool{
+	"AUTHOR": true, "INSTALLATION": true, "DATE-WRITTEN": true,
+	"DATE-COMPILED": true, "SECURITY": true, "REMARKS": true,
+}
+
 // Token is one lexical unit of the source. Words are upper-cased: COBOL is
-// case-insensitive outside literals.
+// case-insensitive outside literals. Comment holds the comment lines just
+// before the token, if it is the first on its line.
 type Token struct {
-	Kind Kind
-	Text string
-	Pos  Pos
+	Kind    Kind
+	Text    string
+	Pos     Pos
+	Comment []string
 }
 
 func (t Token) String() string {
@@ -68,8 +80,9 @@ func (t Token) Is(word string) bool {
 	return t.Kind == Word && t.Text == word
 }
 
-// Lex splits fixed-format source into tokens. Comment lines (* or / in the
-// indicator column) and debugging lines (D) are skipped. A hyphen in the
+// Lex splits fixed-format source into tokens. A block of comment lines (* or
+// / in the indicator column) is attached to the token that follows it; a
+// blank line ends the block. Debugging lines (D) are skipped. A hyphen in the
 // indicator column continues the previous line: an unfinished literal
 // continues after the quote that opens the continuation line, anything else
 // continues at the line's first non-blank character.
@@ -83,6 +96,7 @@ func Lex(file string, source []byte) ([]Token, error) {
 	if l.open != nil {
 		return nil, fmt.Errorf("%s: literal not closed", l.open.Pos)
 	}
+	l.endCommentEntry()
 	return l.tokens, nil
 }
 
@@ -94,17 +108,23 @@ type lexer struct {
 	// picture is set after PIC or PICTURE (and IS), when the next word is a
 	// picture string, which may contain parentheses, commas and periods.
 	picture bool
+	comment []string // comment lines waiting for the next token
+	entry   *Token   // a comment entry still collecting lines
 }
 
 func (l *lexer) line(lineNo int, text string) error {
-	if len(text) < indicatorColumn {
+	if strings.TrimSpace(text[min(len(text), indicatorColumn-1):min(len(text), lastColumn)]) == "" {
+		l.comment = nil
 		return nil
 	}
 	indicator := text[indicatorColumn-1]
 	body := []byte(text[indicatorColumn:min(len(text), lastColumn)])
 	pos := Pos{File: l.file, Line: lineNo}
 	switch indicator {
-	case '*', '/', 'D', 'd':
+	case '*', '/':
+		l.comment = append(l.comment, strings.TrimRight(string(body), " "))
+		return nil
+	case 'D', 'd':
 		return nil
 	case '-':
 		return l.continuation(pos, body)
@@ -115,8 +135,41 @@ func (l *lexer) line(lineNo int, text string) error {
 	if l.open != nil {
 		return fmt.Errorf("%s: literal not closed", l.open.Pos)
 	}
+	if l.entry != nil {
+		if strings.TrimSpace(string(body[:min(len(body), areaBColumn-areaAColumn)])) == "" {
+			l.addToCommentEntry(body)
+			return nil
+		}
+		l.endCommentEntry()
+	}
 	l.scan(pos, body, 0)
 	return nil
+}
+
+// addToCommentEntry adds a line's text to the open comment entry.
+func (l *lexer) addToCommentEntry(text []byte) {
+	if s := strings.TrimSpace(string(text)); s != "" {
+		if l.entry.Text != "" {
+			l.entry.Text += " "
+		}
+		l.entry.Text += s
+	}
+}
+
+func (l *lexer) endCommentEntry() {
+	if l.entry != nil {
+		l.tokens = append(l.tokens, *l.entry)
+		l.entry = nil
+	}
+}
+
+// startsCommentEntry reports whether the last tokens are the header of an
+// identification paragraph with a comment entry, such as AUTHOR followed by
+// its period.
+func (l *lexer) startsCommentEntry() bool {
+	n := len(l.tokens)
+	return n >= 2 && l.tokens[n-1].Kind == Period &&
+		commentEntryParagraphs[l.tokens[n-2].Text] && l.tokens[n-2].Pos.InAreaA()
 }
 
 func (l *lexer) continuation(pos Pos, body []byte) error {
@@ -167,6 +220,11 @@ func (l *lexer) scan(pos Pos, body []byte, i int) {
 		case separator(body, i):
 			if c == '.' {
 				l.emit(Token{Kind: Period, Text: ".", Pos: pos})
+				if l.startsCommentEntry() {
+					l.entry = &Token{Kind: CommentEntry, Pos: pos}
+					l.addToCommentEntry(body[i+1:])
+					return
+				}
 			}
 			i++
 		default:
@@ -199,6 +257,9 @@ func (l *lexer) literal(body []byte, i int) int {
 }
 
 func (l *lexer) emit(t Token) {
+	if l.comment != nil {
+		t.Comment, l.comment = l.comment, nil
+	}
 	switch {
 	case t.Is("PIC") || t.Is("PICTURE"):
 		l.picture = true

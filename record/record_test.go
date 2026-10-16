@@ -1,6 +1,8 @@
 package record
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +29,18 @@ func TestRead(t *testing.T) {
 	}
 	if limit, err := l.Number(r, "AM-OVERDRAFT-LIMIT"); err != nil || limit != 30000 {
 		t.Errorf("limit %d, %v, want 30000 cents", limit, err)
+	}
+}
+
+func TestFields(t *testing.T) {
+	var names []string
+	for _, f := range acctMaster(t).Fields() {
+		names = append(names, fmt.Sprintf("%s@%d", f.Name, f.Start))
+	}
+	want := "AM-ACCT-NO@1 AM-CUST-NO@11 AM-SHORT-NAME@19 AM-ACCT-TYPE@39 AM-STATUS@40 AM-OPEN-DATE@41 " +
+		"AM-LAST-ACTIVITY-DATE@49 AM-BALANCE@57 AM-OVERDRAFT-LIMIT@70 FILLER@79"
+	if got := strings.Join(names, " "); got != want {
+		t.Errorf("fields\n%s\nwant\n%s", got, want)
 	}
 }
 

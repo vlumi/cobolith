@@ -19,6 +19,7 @@ import (
 type Layout struct {
 	Name   string
 	Length int
+	root   *layout.Field
 	fields map[string]*layout.Field
 }
 
@@ -43,7 +44,7 @@ func FromCopybook(path string, copybookDirs []string, name string) (*Layout, err
 // New indexes a record layout's fields by name. A name used more than once,
 // such as FILLER, cannot be looked up.
 func New(root *layout.Field) *Layout {
-	l := &Layout{Name: root.Name, Length: root.Length, fields: map[string]*layout.Field{}}
+	l := &Layout{Name: root.Name, Length: root.Length, root: root, fields: map[string]*layout.Field{}}
 	seen := map[string]int{}
 	var index func(f *layout.Field)
 	index = func(f *layout.Field) {
@@ -60,6 +61,23 @@ func New(root *layout.Field) *Layout {
 		}
 	}
 	return l
+}
+
+// Fields lists the record's elementary fields in the order they are
+// declared, those of every redefinition included.
+func (l *Layout) Fields() []*layout.Field {
+	var fields []*layout.Field
+	var walk func(f *layout.Field)
+	walk = func(f *layout.Field) {
+		if len(f.Children) == 0 {
+			fields = append(fields, f)
+		}
+		for _, child := range f.Children {
+			walk(child)
+		}
+	}
+	walk(l.root)
+	return fields
 }
 
 // Blank returns a record of spaces.

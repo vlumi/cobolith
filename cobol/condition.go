@@ -154,7 +154,7 @@ func (p *statementParser) simpleCondition(last **Condition) (*Condition, error) 
 		*last = c
 	} else if t := p.peek(); t.Kind == Word && classes[t.Text] {
 		c = &Condition{Op: "IS", Left: &left, Class: p.next().Text}
-	} else if left.Name != "" && !negated {
+	} else if left.Name != "" && !negated && (p.conditions[left.Name] || *last == nil) {
 		return &Condition{Op: "NAME", Left: &left}, nil
 	} else if *last != nil {
 		c = &Condition{Op: (*last).Op, Left: (*last).Left, Right: &left}

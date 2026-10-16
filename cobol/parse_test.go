@@ -106,3 +106,19 @@ func TestReadDataEntries(t *testing.T) {
 		t.Errorf("entries %+v, want the 9 entries of HOLD-RECORD", entries)
 	}
 }
+
+func TestParseErrors(t *testing.T) {
+	head := "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. BROKEN.\n"
+	for name, source := range map[string]string{
+		"FD without a name": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"a paragraph twice": head + "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n       MAIN-PARA.\n           STOP RUN.\n",
+	} {
+		tokens, err := Lex("test", []byte(source))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse("test", tokens); err == nil {
+			t.Errorf("%s: parsed without error", name)
+		}
+	}
+}

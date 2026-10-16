@@ -3,6 +3,8 @@
        DATA DIVISION.
        WORKING-STORAGE SECTION.
        01  WS-A                        PIC 9.
+       01  WS-FLAG                     PIC X.
+           88  DONE                    VALUE 'Y'.
        PROCEDURE DIVISION.
        MAIN-PARA.
            MOVE WS-A TO WS-B WS-C(WS-I)

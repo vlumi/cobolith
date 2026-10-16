@@ -215,6 +215,9 @@ func (p *Program) parseData(tokens []Token) error {
 		case len(entry) == 2 && entry[1].Is("SECTION"):
 			section = entry[0].Text
 		case entry[0].Is("FD") || entry[0].Is("SD"):
+			if len(entry) < 2 {
+				return fmt.Errorf("%s: %s without a file name", entry[0].Pos, entry[0])
+			}
 			if section != "FILE" {
 				return fmt.Errorf("%s: %s outside the FILE SECTION", entry[0].Pos, entry[0])
 			}
@@ -266,6 +269,9 @@ func (p *Program) parseProcedure(tokens []Token) error {
 			i += 2
 			continue
 		case i+1 < len(tokens) && tokens[i+1].Kind == Period:
+			if procedures[t.Text] {
+				return fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
+			}
 			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Comment: t.Comment, Pos: t.Pos})
 			procedures[t.Text] = true
 			i++
@@ -277,14 +283,27 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		last := &p.Paragraphs[len(p.Paragraphs)-1]
 		last.Body = append(last.Body, t)
 	}
+	conditions := map[string]bool{}
+	for _, fd := range p.FileSection {
+		addConditionNames(conditions, fd.Entries)
+	}
+	addConditionNames(conditions, p.WorkingStorage)
 	for i := range p.Paragraphs {
-		statements, err := ParseStatements(p.Paragraphs[i].Body, procedures)
+		statements, err := ParseStatements(p.Paragraphs[i].Body, procedures, conditions)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.Paragraphs[i].Name, err)
 		}
 		p.Paragraphs[i].Statements = statements
 	}
 	return nil
+}
+
+func addConditionNames(names map[string]bool, entries []*DataEntry) {
+	for _, e := range entries {
+		if e.Level == 88 {
+			names[e.Name] = true
+		}
+	}
 }
 
 // cursor walks the tokens of one entry.

@@ -55,24 +55,35 @@ func (c Cond) Bypasses(rc int) bool {
 }
 
 // Disp is a dataset's disposition: whether the step reads an existing
-// dataset or creates a new one.
+// dataset, creates a new one, or appends to one, creating it if needed.
 type Disp string
 
 const (
 	Shr Disp = "SHR"
 	Old Disp = "OLD"
 	New Disp = "NEW"
+	Mod Disp = "MOD"
 )
 
-// DD binds the file a program knows by Name either to a cataloged dataset
-// (DSN, Disp and, for new datasets, LRECL) or to the job's output (Sysout).
+// DD binds the file a program knows by Name to a dataset (DSN, Disp and,
+// for new datasets, LRECL), to the job's output (Sysout), or to nothing
+// (Dummy: reads find no records, writes are discarded).
+//
+// DSN=NAME(+1) is a generation of the generation data group NAME, relative
+// to the newest generation when the job started: (0) is that one, (-1) the
+// one before, (+1) the next. DSN=&&NAME is a temporary dataset that exists
+// only while the job runs.
 type DD struct {
-	Name   string
-	DSN    string
-	Disp   Disp
-	LRECL  int
-	Sysout bool
-	Line   int
+	Name       string
+	DSN        string // without the generation or the &&
+	Generation int
+	Relative   bool
+	Temporary  bool
+	Disp       Disp
+	LRECL      int
+	Sysout     bool
+	Dummy      bool
+	Line       int
 }
 
 // statement is one JCL statement with its continuation lines joined.
@@ -227,7 +238,9 @@ func parseDD(s statement) (DD, error) {
 		key, value, _ := strings.Cut(operand, "=")
 		switch key {
 		case "DSN":
-			dd.DSN = value
+			if err := dd.setDSN(value); err != nil {
+				return DD{}, err
+			}
 		case "DISP":
 			dd.Disp = Disp(value)
 		case "DCB":
@@ -238,6 +251,8 @@ func parseDD(s statement) (DD, error) {
 			dd.LRECL = lrecl
 		case "SYSOUT":
 			dd.Sysout = true
+		case "DUMMY":
+			dd.Dummy = true
 		default:
 			return DD{}, fmt.Errorf("DD %s: unknown operand %q", s.name, key)
 		}
@@ -245,18 +260,43 @@ func parseDD(s statement) (DD, error) {
 	return dd, dd.check()
 }
 
-func (dd DD) check() error {
-	switch {
-	case dd.Sysout && dd.DSN != "":
-		return fmt.Errorf("DD %s: both SYSOUT and DSN", dd.Name)
-	case dd.Sysout:
+// setDSN reads a dataset name with an optional generation or && prefix.
+func (dd *DD) setDSN(value string) error {
+	name, generation, relative := strings.Cut(value, "(")
+	if strings.HasPrefix(name, "&&") {
+		dd.Temporary = true
+		name = name[2:]
+	}
+	dd.DSN = name
+	if !relative {
 		return nil
-	case dd.DSN == "":
-		return fmt.Errorf("DD %s: no DSN", dd.Name)
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(generation, ")"))
+	if err != nil || !strings.HasSuffix(generation, ")") {
+		return fmt.Errorf("DD %s: DSN=%s: bad generation", dd.Name, value)
+	}
+	dd.Generation, dd.Relative = n, true
+	return nil
+}
+
+func (dd DD) check() error {
+	targets := 0
+	for _, set := range []bool{dd.Sysout, dd.Dummy, dd.DSN != ""} {
+		if set {
+			targets++
+		}
+	}
+	switch {
+	case targets != 1:
+		return fmt.Errorf("DD %s: needs exactly one of DSN, SYSOUT and DUMMY", dd.Name)
+	case dd.Sysout || dd.Dummy:
+		return nil
+	case dd.Temporary && dd.Relative:
+		return fmt.Errorf("DD %s: a temporary dataset has no generations", dd.Name)
 	case dd.Disp == New && dd.LRECL == 0:
 		return fmt.Errorf("DD %s: a new dataset needs DCB=(RECFM=FB,LRECL=n)", dd.Name)
-	case dd.Disp != Shr && dd.Disp != Old && dd.Disp != New:
-		return fmt.Errorf("DD %s: DISP=%s is not SHR, OLD or NEW", dd.Name, dd.Disp)
+	case dd.Disp != Shr && dd.Disp != Old && dd.Disp != New && dd.Disp != Mod:
+		return fmt.Errorf("DD %s: DISP=%s is not SHR, OLD, NEW or MOD", dd.Name, dd.Disp)
 	}
 	return nil
 }

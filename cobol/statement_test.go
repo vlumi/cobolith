@@ -24,6 +24,9 @@ func describe(b *strings.Builder, statements []Statement, indent string) {
 		for _, f := range s.Files {
 			fmt.Fprintf(b, " file %s", strings.TrimSpace(f.Mode+" "+f.Name))
 		}
+		if s.Calls != "" {
+			b.WriteString(" calls " + s.Calls)
+		}
 		for _, list := range []struct {
 			label string
 			ops   []Operand
@@ -128,6 +131,52 @@ func TestStatementText(t *testing.T) {
 		if !slices.Contains(got, want) {
 			t.Errorf("no statement %q in\n%q", want, got)
 		}
+	}
+}
+
+func TestIndexedAndCalls(t *testing.T) {
+	source := `           READ CARD-FILE KEY IS CR-NUMBER
+               INVALID KEY MOVE 'N' TO WS-FOUND
+           END-READ
+           REWRITE CARD-RECORD FROM WS-CARD
+               INVALID KEY MOVE 'E' TO WS-STATUS
+           END-REWRITE
+           DELETE HOLD-FILE RECORD
+           START HOLD-FILE KEY IS NOT LESS THAN HD-KEY
+               INVALID KEY SET HOLDS-DONE TO TRUE
+           END-START
+           CALL 'AUTHPUR' USING WS-REQUEST BY CONTENT WS-DATE
+               ON EXCEPTION MOVE 'X' TO WS-STATUS
+           END-CALL
+           CALL WS-PROGRAM USING BY REFERENCE WS-REQUEST.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements, err := ParseStatements(tokens, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	describe(&b, statements, "")
+	want := `READ file CARD-FILE reads CR-NUMBER
+  INVALID KEY
+    MOVE reads 'N' writes WS-FOUND
+REWRITE reads WS-CARD writes CARD-RECORD
+  INVALID KEY
+    MOVE reads 'E' writes WS-STATUS
+DELETE file HOLD-FILE
+START file HOLD-FILE reads HD-KEY
+  INVALID KEY
+    SET writes HOLDS-DONE
+CALL calls AUTHPUR reads WS-REQUEST, WS-DATE writes WS-REQUEST
+  ON EXCEPTION
+    MOVE reads 'X' writes WS-STATUS
+CALL reads WS-PROGRAM, WS-REQUEST writes WS-REQUEST
+`
+	if got := b.String(); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }
 

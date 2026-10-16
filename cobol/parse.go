@@ -15,7 +15,11 @@ type Program struct {
 	Files          []FileControl
 	FileSection    []FileDescription
 	WorkingStorage []*DataEntry
-	Paragraphs     []Paragraph
+	// Linkage are the items a calling program passes, which the procedure
+	// division names in Using.
+	Linkage    []*DataEntry
+	Using      []string
+	Paragraphs []Paragraph
 }
 
 // IdentificationEntry is an identification paragraph with a comment entry,
@@ -31,6 +35,8 @@ type FileControl struct {
 	Name         string
 	Assign       string
 	Organization string
+	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
+	RecordKey    string // an indexed file's key
 	Status       string
 	Pos          Pos
 }
@@ -94,7 +100,8 @@ func Parse(path string, tokens []Token) (*Program, error) {
 	return p, nil
 }
 
-// splitDivisions returns the tokens of each division after its header.
+// splitDivisions returns the tokens of each division after its header,
+// those of the procedure division led by its USING phrase, if any.
 func splitDivisions(tokens []Token) (map[string][]Token, error) {
 	divisions := map[string][]Token{}
 	current := ""
@@ -108,7 +115,11 @@ func splitDivisions(tokens []Token) (map[string][]Token, error) {
 				return nil, fmt.Errorf("%s: second %s DIVISION", tokens[i].Pos, current)
 			}
 			divisions[current] = nil
-			i = skipPast(tokens, i, Period)
+			end := skipPast(tokens, i, Period)
+			if current == "PROCEDURE" && i+2 < end && tokens[i+2].Is("USING") {
+				divisions[current] = append(divisions[current], tokens[i+2:end]...)
+			}
+			i = end
 			continue
 		}
 		if current == "" {
@@ -177,12 +188,12 @@ func (p *Program) parseEnvironment(tokens []Token) error {
 }
 
 // parseSelect parses SELECT [OPTIONAL] name ASSIGN [TO] target and the
-// ORGANIZATION and FILE STATUS clauses.
+// ORGANIZATION, ACCESS MODE, RECORD KEY and FILE STATUS clauses.
 func parseSelect(entry []Token) (FileControl, error) {
 	c := &cursor{tokens: entry}
 	c.next()
 	c.optional("OPTIONAL")
-	file := FileControl{Name: c.next().Text, Organization: "SEQUENTIAL", Pos: entry[0].Pos}
+	file := FileControl{Name: c.next().Text, Organization: "SEQUENTIAL", Access: "SEQUENTIAL", Pos: entry[0].Pos}
 	for !c.done() {
 		clause := c.next()
 		switch {
@@ -195,6 +206,14 @@ func parseSelect(entry []Token) (FileControl, error) {
 			if file.Organization == "LINE" || file.Organization == "RECORD" {
 				file.Organization += " " + c.next().Text
 			}
+		case clause.Is("ACCESS"):
+			c.optional("MODE")
+			c.optional("IS")
+			file.Access = c.next().Text
+		case clause.Is("RECORD"):
+			c.optional("KEY")
+			c.optional("IS")
+			file.RecordKey = c.next().Text
 		case clause.Is("FILE"):
 			if err := c.expect("STATUS"); err != nil {
 				return FileControl{}, err
@@ -247,6 +266,8 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 		fd.Entries = append(fd.Entries, entry)
 	case "WORKING-STORAGE":
 		p.WorkingStorage = append(p.WorkingStorage, entry)
+	case "LINKAGE":
+		p.Linkage = append(p.Linkage, entry)
 	default:
 		return fmt.Errorf("%s: the %s SECTION is not supported yet", entry.Pos, section)
 	}
@@ -257,6 +278,13 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 // their statements. A header is a name in area A followed by a period, or by
 // SECTION and a period.
 func (p *Program) parseProcedure(tokens []Token) error {
+	if len(tokens) > 0 && tokens[0].Is("USING") {
+		i := 1
+		for ; i < len(tokens) && tokens[i].Kind == Word && !tokens[i].Pos.InAreaA(); i++ {
+			p.Using = append(p.Using, tokens[i].Text)
+		}
+		tokens = tokens[i:]
+	}
 	section := ""
 	procedures := map[string]bool{}
 	for i := 0; i < len(tokens); i++ {

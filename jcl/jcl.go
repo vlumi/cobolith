@@ -76,6 +76,10 @@ const (
 // for new datasets, LRECL), to the job's output (Sysout), or to nothing
 // (Dummy: reads find no records, writes are discarded).
 //
+// RECORG=KS makes the dataset Indexed, a key-sequenced dataset whose
+// records a program reads and writes by key. Its record length is given as
+// LRECL=n, which a DD may also give instead of DCB=(RECFM=FB,LRECL=n).
+//
 // DSN=NAME(+1) is a generation of the generation data group NAME, relative
 // to the newest generation when the job started: (0) is that one, (-1) the
 // one before, (+1) the next. DSN=NAME of a generation data group is every
@@ -92,6 +96,7 @@ type DD struct {
 	Temporary  bool
 	Disp       Disp
 	LRECL      int
+	Indexed    bool
 	Sysout     bool
 	Dummy      bool
 	Line       int
@@ -326,6 +331,17 @@ func parseDD(s statement) (DD, error) {
 				return DD{}, err
 			}
 			dd.LRECL = lrecl
+		case "LRECL":
+			lrecl, err := parseLRECL(value)
+			if err != nil {
+				return DD{}, err
+			}
+			dd.LRECL = lrecl
+		case "RECORG":
+			if value != "KS" {
+				return DD{}, fmt.Errorf("DD %s: RECORG=%s, only KS is supported", s.name, value)
+			}
+			dd.Indexed = true
 		case "SYSOUT":
 			dd.Sysout = true
 		case "DUMMY":
@@ -371,7 +387,7 @@ func (dd DD) check() error {
 	case dd.Temporary && dd.Relative:
 		return fmt.Errorf("DD %s: a temporary dataset has no generations", dd.Name)
 	case dd.Disp == New && dd.LRECL == 0:
-		return fmt.Errorf("DD %s: a new dataset needs DCB=(RECFM=FB,LRECL=n)", dd.Name)
+		return fmt.Errorf("DD %s: a new dataset needs LRECL=n or DCB=(RECFM=FB,LRECL=n)", dd.Name)
 	case dd.Disp != Shr && dd.Disp != Old && dd.Disp != New && dd.Disp != Mod:
 		return fmt.Errorf("DD %s: DISP=%s is not SHR, OLD, NEW or MOD", dd.Name, dd.Disp)
 	}
@@ -390,9 +406,9 @@ func parseDCB(value string) (int, error) {
 				return 0, fmt.Errorf("DCB: RECFM=%s, only FB is supported", v)
 			}
 		case "LRECL":
-			n, err := strconv.Atoi(v)
-			if err != nil || n <= 0 {
-				return 0, fmt.Errorf("DCB: LRECL=%s is not a record length", v)
+			n, err := parseLRECL(v)
+			if err != nil {
+				return 0, fmt.Errorf("DCB: %w", err)
 			}
 			lrecl = n
 		default:
@@ -400,6 +416,14 @@ func parseDCB(value string) (int, error) {
 		}
 	}
 	return lrecl, nil
+}
+
+func parseLRECL(value string) (int, error) {
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("LRECL=%s is not a record length", value)
+	}
+	return n, nil
 }
 
 // splitOperands splits at the commas that are outside parentheses and quotes.

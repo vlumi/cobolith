@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestLinkage(t *testing.T) {
+	p, err := ReadProgram("testdata/program/CALLED.cbl", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range p.Linkage {
+		names = append(names, e.Name)
+	}
+	if want := []string{"LK-REQUEST", "LK-CODE", "LK-AMOUNT", "LK-RESPONSE"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("linkage %q, want %q", names, want)
+	}
+	if want := []string{"LK-REQUEST", "LK-RESPONSE"}; !reflect.DeepEqual(p.Using, want) {
+		t.Errorf("using %q, want %q", p.Using, want)
+	}
+	if len(p.Paragraphs) != 1 || p.Paragraphs[0].Name != "MAIN-PARA" || len(p.Paragraphs[0].Statements) != 2 {
+		t.Errorf("paragraphs %+v, want MAIN-PARA with two statements", p.Paragraphs)
+	}
+}
+
 func TestReadProgram(t *testing.T) {
 	p, err := ReadProgram("testdata/program/SAMPLE.cbl", []string{"testdata/program"})
 	if err != nil {
@@ -27,12 +47,15 @@ func TestReadProgram(t *testing.T) {
 		t.Errorf("HOLD-RECORD comment %q, want the copybook's comment", p.FileSection[0].Entries[0].Comment)
 	}
 
-	wantFile := FileControl{
-		Name: "HOLD-FILE", Assign: "HOLDIN", Organization: "LINE SEQUENTIAL", Status: "WS-STATUS",
+	wantFiles := []FileControl{{
+		Name: "HOLD-FILE", Assign: "HOLDIN", Organization: "LINE SEQUENTIAL", Access: "SEQUENTIAL", Status: "WS-STATUS",
 		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 9, Col: 12},
-	}
-	if len(p.Files) != 1 || p.Files[0] != wantFile {
-		t.Errorf("files %+v, want %+v", p.Files, wantFile)
+	}, {
+		Name: "KEYED-FILE", Assign: "KEYED", Organization: "INDEXED", Access: "DYNAMIC", RecordKey: "KEYED-ID", Status: "WS-STATUS",
+		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 12, Col: 12},
+	}}
+	if !reflect.DeepEqual(p.Files, wantFiles) {
+		t.Errorf("files %+v, want %+v", p.Files, wantFiles)
 	}
 
 	if len(p.FileSection) != 1 || p.FileSection[0].Name != "HOLD-FILE" {

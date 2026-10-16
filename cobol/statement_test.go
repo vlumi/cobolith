@@ -20,8 +20,8 @@ func describe(b *strings.Builder, statements []Statement, indent string) {
 				b.WriteString(" THRU " + ref.Thru)
 			}
 		}
-		if len(s.Files) > 0 {
-			fmt.Fprintf(b, " files %v", s.Files)
+		for _, f := range s.Files {
+			fmt.Fprintf(b, " file %s", strings.TrimSpace(f.Mode+" "+f.Name))
 		}
 		for _, list := range []struct {
 			label string
@@ -77,7 +77,7 @@ EVALUATE reads WS-A
     DISPLAY reads 'NO', WS-A
 PERFORM [WS-I > WS-N] reads 1, 1 writes WS-I
   BODY
-    READ files [IN-FILE]
+    READ file IN-FILE
       AT END
         SET writes DONE
       NOT AT END
@@ -88,6 +88,8 @@ SEARCH reads WS-ENTRY
     MOVE reads 0 writes WS-A
   WHEN [WS-CODE(WS-CX) = 'DP']
     MOVE reads WS-TEXT(WS-CX) writes WS-G
+OPEN file INPUT IN-FILE file OUTPUT OUT-FILE
+SORT file WORK-FILE file INPUT IN-FILE file OUTPUT OUT-FILE reads WS-A
 GO -> OTHER-PARA -> OTHER-EXIT reads WS-A
 IF [WS-A >= WS-B]
   THEN

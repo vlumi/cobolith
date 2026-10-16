@@ -8,17 +8,27 @@ import (
 
 // Statement is one statement of the procedure division: its verb, the
 // data items it reads and writes, the files and procedures it names, the
-// condition it tests, and the statements nested in it.
+// condition it tests, and the statements nested in it. EXIT keeps what it
+// exits in its verb: EXIT PROGRAM, EXIT PARAGRAPH.
 type Statement struct {
 	Verb       string
 	Pos        Pos
 	Reads      []Operand
 	Writes     []Operand
-	Files      []string
+	Files      []FileRef
 	Procedures []ProcedureRef
 	// Condition is what an IF tests, or the UNTIL of a PERFORM.
 	Condition *Condition
 	Branches  []Branch
+}
+
+// FileRef is a file a statement names, and the mode it uses it in: OPEN's
+// INPUT, OUTPUT, EXTEND or I-O, a SORT's USING files as INPUT and GIVING
+// files as OUTPUT, and no mode for the files READ, RETURN and CLOSE name
+// and the sort file of a SORT.
+type FileRef struct {
+	Name string
+	Mode string
 }
 
 // ProcedureRef names a procedure a statement transfers control to: a
@@ -201,7 +211,9 @@ func (p *statementParser) statement() (Statement, error) {
 	case "STOP":
 		err = p.expect("RUN")
 	case "EXIT":
-		p.optional("PARAGRAPH", "PROGRAM", "SECTION", "PERFORM")
+		if t := p.peek(); p.optional("PARAGRAPH", "PROGRAM", "SECTION", "PERFORM") {
+			s.Verb += " " + t.Text
+		}
 	case "CONTINUE", "GOBACK":
 	}
 	if err != nil {
@@ -721,16 +733,16 @@ func (p *statementParser) search(s *Statement) error {
 	return nil
 }
 
-// files parses OPEN and CLOSE: the files, with OPEN's modes skipped; how
-// each file is opened is fileio's business.
+// files parses OPEN and CLOSE: the files, with OPEN's modes.
 func (p *statementParser) files(s *Statement) {
+	mode := ""
 	for {
 		t := p.peek()
 		switch {
 		case t.Kind == Word && slices.Contains([]string{"INPUT", "OUTPUT", "EXTEND", "I-O"}, t.Text):
-			p.next()
+			mode = p.next().Text
 		case t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t):
-			s.Files = append(s.Files, p.next().Text)
+			s.Files = append(s.Files, FileRef{Name: p.next().Text, Mode: mode})
 		default:
 			return
 		}
@@ -738,7 +750,7 @@ func (p *statementParser) files(s *Statement) {
 }
 
 func (p *statementParser) read(s *Statement) error {
-	s.Files = []string{p.next().Text}
+	s.Files = []FileRef{{Name: p.next().Text}}
 	p.optional("NEXT")
 	p.optional("RECORD")
 	if p.optional("INTO") {
@@ -782,7 +794,7 @@ func (p *statementParser) write(s *Statement) error {
 // sort parses SORT file ON ASCENDING KEY keys, then USING files or an
 // input procedure, then GIVING files or an output procedure.
 func (p *statementParser) sort(s *Statement) error {
-	s.Files = []string{p.next().Text}
+	s.Files = []FileRef{{Name: p.next().Text}}
 	for p.optional("ON") || p.peek().Is("ASCENDING") || p.peek().Is("DESCENDING") {
 		p.optional("ASCENDING", "DESCENDING")
 		p.optional("KEY")
@@ -795,7 +807,7 @@ func (p *statementParser) sort(s *Statement) error {
 	if p.optional("WITH") {
 		p.optional("DUPLICATES")
 	}
-	for _, phrase := range []struct{ procedure, files string }{{"INPUT", "USING"}, {"OUTPUT", "GIVING"}} {
+	for _, phrase := range []struct{ procedure, files, mode string }{{"INPUT", "USING", "INPUT"}, {"OUTPUT", "GIVING", "OUTPUT"}} {
 		switch {
 		case p.optional(phrase.procedure):
 			if err := p.expect("PROCEDURE"); err != nil {
@@ -809,7 +821,7 @@ func (p *statementParser) sort(s *Statement) error {
 			s.Procedures = append(s.Procedures, ref)
 		case p.optional(phrase.files):
 			for t := p.peek(); t.Kind == Word && !verbs[t.Text] && !keywords[t.Text]; t = p.peek() {
-				s.Files = append(s.Files, p.next().Text)
+				s.Files = append(s.Files, FileRef{Name: p.next().Text, Mode: phrase.mode})
 			}
 		}
 	}
@@ -860,5 +872,16 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string) er
 			return err
 		}
 		s.Branches = append(s.Branches, Branch{Kind: kind, Statements: statements})
+	}
+}
+
+// Walk visits statements and the statements nested in them, depth first,
+// in the order they are written.
+func Walk(statements []Statement, visit func(Statement)) {
+	for _, s := range statements {
+		visit(s)
+		for _, b := range s.Branches {
+			Walk(b.Statements, visit)
+		}
 	}
 }

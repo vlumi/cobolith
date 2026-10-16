@@ -42,11 +42,14 @@
                WHEN WS-CODE(WS-CX) = 'DP'
                    MOVE WS-TEXT(WS-CX) TO WS-G
            END-SEARCH
+           OPEN INPUT IN-FILE OUTPUT OUT-FILE
+           SORT WORK-FILE ON ASCENDING KEY WS-A
+               USING IN-FILE GIVING OUT-FILE
            GO TO OTHER-PARA OTHER-EXIT DEPENDING ON WS-A.
            IF WS-A GREATER THAN OR EQUAL TO WS-B
                STOP RUN.
            STOP RUN.
        OTHER-PARA.
-           EXIT.
+           EXIT PROGRAM.
        OTHER-EXIT.
            EXIT.

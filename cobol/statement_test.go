@@ -2,6 +2,7 @@ package cobol
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -102,6 +103,31 @@ STOP
 	compute := p.Paragraphs[0].Statements[4].Reads[0]
 	if got := strings.Join(compute.Refs, " "); got != "WS-A WS-B WS-C" {
 		t.Errorf("COMPUTE reads %s, want WS-A WS-B WS-C", got)
+	}
+}
+
+func TestStatementText(t *testing.T) {
+	p, err := ReadProgram("testdata/program/STATEMENTS.cbl", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	Walk(p.Paragraphs[0].Statements, func(s Statement) { got = append(got, s.Text) })
+	for _, want := range []string{
+		"MOVE WS-A TO WS-B WS-C(WS-I)",
+		"COMPUTE WS-E = WS-A * (WS-B + 1) - FUNCTION MOD(WS-C 7)",
+		"STRING 'A' WS-F(1:6) DELIMITED BY SIZE INTO WS-G",
+		"IF WS-A = 1 OR 2 AND NOT DONE",
+		"EVALUATE WS-A ALSO TRUE",
+		"PERFORM VARYING WS-I FROM 1 BY 1 UNTIL WS-I > WS-N",
+		"READ IN-FILE",
+		"WRITE OUT-RECORD FROM IN-RECORD",
+		"SEARCH WS-ENTRY",
+		"GO TO OTHER-PARA OTHER-EXIT DEPENDING ON WS-A",
+	} {
+		if !slices.Contains(got, want) {
+			t.Errorf("no statement %q in\n%q", want, got)
+		}
 	}
 }
 

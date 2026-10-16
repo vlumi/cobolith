@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -106,6 +107,20 @@ type statement struct {
 	operands  string
 	comment   []string
 	line      int
+}
+
+// ParseFile reads a job from a file.
+func ParseFile(path string) (*Job, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	job, err := Parse(f)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return job, nil
 }
 
 // Parse reads a job from r.

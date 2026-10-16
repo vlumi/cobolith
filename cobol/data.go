@@ -18,6 +18,7 @@ type DataEntry struct {
 	OccursMin   int
 	DependingOn string
 	Values      []string // VALUE literals; for level 88, ranges as "A THRU B"
+	Comment     []string // the comment lines before the entry
 	Pos         Pos
 }
 
@@ -42,7 +43,7 @@ func ParseDataEntry(tokens []Token) (*DataEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	entry := &DataEntry{Level: level, Name: "FILLER", Pos: tokens[0].Pos}
+	entry := &DataEntry{Level: level, Name: "FILLER", Comment: tokens[0].Comment, Pos: tokens[0].Pos}
 	if t := c.peek(); t.Kind == Word && !isClause(t.Text) {
 		entry.Name = c.next().Text
 	}

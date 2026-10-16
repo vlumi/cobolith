@@ -1,0 +1,94 @@
+package cobol
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestReadProgram(t *testing.T) {
+	p, err := ReadProgram("testdata/program/SAMPLE.cbl", []string{"testdata/program"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != "SAMPLE" {
+		t.Errorf("ID %q, want SAMPLE", p.ID)
+	}
+
+	wantFile := FileControl{
+		Name: "HOLD-FILE", Assign: "HOLDIN", Organization: "LINE SEQUENTIAL", Status: "WS-STATUS",
+		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 6, Col: 12},
+	}
+	if len(p.Files) != 1 || p.Files[0] != wantFile {
+		t.Errorf("files %+v, want %+v", p.Files, wantFile)
+	}
+
+	if len(p.FileSection) != 1 || p.FileSection[0].Name != "HOLD-FILE" {
+		t.Fatalf("file section %+v, want the FD of HOLD-FILE", p.FileSection)
+	}
+	var names []string
+	for _, e := range p.FileSection[0].Entries {
+		names = append(names, e.Name)
+	}
+	wantNames := []string{
+		"HOLD-RECORD", "HR-TYPE", "HR-OPEN", "HR-SETTLED", "HR-BODY",
+		"HR-DETAIL", "HR-ACCT-NO", "HR-AMOUNT", "FILLER",
+	}
+	if !reflect.DeepEqual(names, wantNames) {
+		t.Errorf("FD entries %q, want %q", names, wantNames)
+	}
+	amount := p.FileSection[0].Entries[7]
+	if amount.Usage != "COMP-3" || amount.Picture != "S9(7)V99" || amount.Pos.File != "testdata/program/HOLDREC.cpy" {
+		t.Errorf("HR-AMOUNT %+v, want COMP-3 S9(7)V99 from the copybook", amount)
+	}
+	if settled := p.FileSection[0].Entries[3]; !reflect.DeepEqual(settled.Values, []string{"'S'", "'X'"}) {
+		t.Errorf("HR-SETTLED values %q", settled.Values)
+	}
+	if detail := p.FileSection[0].Entries[5]; detail.Redefines != "HR-BODY" {
+		t.Errorf("HR-DETAIL redefines %q, want HR-BODY", detail.Redefines)
+	}
+
+	item := p.WorkingStorage[3]
+	if item.Name != "WS-ITEM" || item.OccursMin != 0 || item.Occurs != 20 || item.DependingOn != "WS-COUNT" {
+		t.Errorf("WS-ITEM %+v, want OCCURS 0 TO 20 DEPENDING ON WS-COUNT", item)
+	}
+	if passing := p.WorkingStorage[5]; !reflect.DeepEqual(passing.Values, []string{"5 THRU 9"}) {
+		t.Errorf("PASSING values %q, want 5 THRU 9", passing.Values)
+	}
+
+	if len(p.Paragraphs) != 2 || p.Paragraphs[0].Name != "MAIN-PARA" || p.Paragraphs[1].Name != "READ-PARA" {
+		t.Fatalf("paragraphs %+v", p.Paragraphs)
+	}
+	if got := texts(p.Paragraphs[0].Body); !reflect.DeepEqual(got, []string{"PERFORM", "READ-PARA", "STOP", "RUN", "."}) {
+		t.Errorf("MAIN-PARA body %q", got)
+	}
+}
+
+func TestParseDataEntryErrors(t *testing.T) {
+	tests := map[string]string{
+		"unsupported clause": "       01  X PIC X SYNC.",
+		"unsupported usage":  "       01  X PIC 9 USAGE INDEX.",
+		"no level":           "       X PIC X.",
+		"value without one":  "       01  X PIC X VALUE.",
+	}
+	for name, line := range tests {
+		t.Run(name, func(t *testing.T) {
+			tokens, err := Lex("T.cbl", []byte(line))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ParseDataEntry(tokens[:len(tokens)-1]); err == nil {
+				t.Error("parsed without error")
+			}
+		})
+	}
+}
+
+func TestReadDataEntries(t *testing.T) {
+	entries, err := ReadDataEntries("testdata/program/HOLDREC.cpy", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 9 || entries[0].Name != "HOLD-RECORD" || entries[8].Name != "FILLER" {
+		t.Errorf("entries %+v, want the 9 entries of HOLD-RECORD", entries)
+	}
+}

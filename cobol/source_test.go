@@ -1,0 +1,104 @@
+package cobol
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// fixed builds fixed-format source from lines written from column 7 on, so
+// tests can show the indicator column without the sequence area.
+func fixed(lines ...string) []byte {
+	var b strings.Builder
+	for _, line := range lines {
+		b.WriteString("000100" + line + "\n")
+	}
+	return []byte(b.String())
+}
+
+func texts(tokens []Token) []string {
+	var out []string
+	for _, t := range tokens {
+		out = append(out, t.String())
+	}
+	return out
+}
+
+func TestLex(t *testing.T) {
+	source := fixed(
+		"*COMMENT LINE IS SKIPPED",
+		" 01  amount       PIC S9(7)V99 VALUE -1.25.",
+		" 01  edited       PIC IS Z,ZZ9.99-.",
+		"     MOVE 'IT''S' TO X(I), Y.",
+		"D    DISPLAY 'DEBUG'.",
+		fmt.Sprintf("%-66s%s", " 01  FAR-RIGHT    PIC X.", "IGNORED FROM COLUMN 73"),
+	)
+	tokens, err := Lex("T.cbl", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"01", "AMOUNT", "PIC", "S9(7)V99", "VALUE", "-1.25", ".",
+		"01", "EDITED", "PIC", "IS", "Z,ZZ9.99-", ".",
+		"MOVE", "'IT'S'", "TO", "X", "(", "I", ")", "Y", ".",
+		"01", "FAR-RIGHT", "PIC", "X", ".",
+	}
+	if got := texts(tokens); !slices.Equal(got, want) {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	if pos := tokens[1].Pos; pos.Line != 2 || pos.Col != 12 || pos.InAreaA() {
+		t.Errorf("AMOUNT at %+v, want line 2, column 12, area B", pos)
+	}
+	if pos := tokens[0].Pos; !pos.InAreaA() {
+		t.Errorf("level 01 at %+v, want area A", pos)
+	}
+}
+
+func TestLexContinuation(t *testing.T) {
+	source := fixed(
+		"     MOVE 'A LITERAL THAT RUNS PAST COLUMN SEVENTY-TWO AND IS CONT",
+		"-        'INUED' TO WS-MES",
+		"-        SAGE.",
+	)
+	tokens, err := Lex("T.cbl", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"MOVE", "'A LITERAL THAT RUNS PAST COLUMN SEVENTY-TWO AND IS CONTINUED'",
+		"TO", "WS-MESSAGE", ".",
+	}
+	if got := texts(tokens); !slices.Equal(got, want) {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestLexContinuationPadsToColumn72(t *testing.T) {
+	source := fixed(
+		"     MOVE 'SHORT",
+		"-        'END' TO X.",
+	)
+	tokens, err := Lex("T.cbl", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := tokens[1].Text, "SHORT"+strings.Repeat(" ", 50)+"END"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestLexErrors(t *testing.T) {
+	tests := map[string][]byte{
+		"unclosed literal":          fixed("     MOVE 'OPEN TO X."),
+		"unknown indicator":         fixed("X    MOVE A TO B."),
+		"continuation without open": fixed("-        'TEXT'."),
+	}
+	for name, source := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Lex("T.cbl", source); err == nil {
+				t.Error("lexed without error")
+			}
+		})
+	}
+}

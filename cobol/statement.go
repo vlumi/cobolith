@@ -20,6 +20,9 @@ type Statement struct {
 	Writes     []Operand
 	Files      []FileRef
 	Procedures []ProcedureRef
+	// Calls is the program a CALL calls, when it is named by a literal;
+	// a CALL through a data item reads the item instead.
+	Calls string
 	// Condition is what an IF tests, or the UNTIL of a PERFORM.
 	Condition *Condition
 	Branches  []Branch
@@ -66,7 +69,7 @@ type Operand struct {
 
 // Statement verbs that the parser knows.
 var verbs = map[string]bool{
-	"ACCEPT": true, "ADD": true, "CLOSE": true, "COMPUTE": true, "CONTINUE": true, "DISPLAY": true,
+	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "DELETE": true, "REWRITE": true, "START": true, "COMPUTE": true, "CONTINUE": true, "DISPLAY": true,
 	"DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true, "GOBACK": true, "IF": true,
 	"INITIALIZE": true, "MOVE": true, "MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true,
 	"RELEASE": true, "RETURN": true, "SEARCH": true, "SET": true, "SORT": true, "STOP": true,
@@ -86,7 +89,7 @@ var keywords = map[string]bool{
 	"IN": true, "THAN": true, "EQUAL": true, "GREATER": true, "LESS": true, "ANY": true, "RUN": true,
 	"PARAGRAPH": true, "PROGRAM": true, "SECTION": true, "FUNCTION": true, "CORRESPONDING": true,
 	"CORR": true, "LINE": true, "LINES": true, "PAGE": true, "NUMERIC": true, "ALPHABETIC": true,
-	"POSITIVE": true, "NEGATIVE": true, "TEST": true,
+	"POSITIVE": true, "NEGATIVE": true, "TEST": true, "REFERENCE": true, "CONTENT": true, "EXCEPTION": true,
 	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
@@ -215,8 +218,16 @@ func (p *statementParser) statement() (Statement, error) {
 		p.files(&s)
 	case "READ", "RETURN":
 		err = p.read(&s)
-	case "WRITE", "RELEASE":
+	case "WRITE", "RELEASE", "REWRITE":
 		err = p.write(&s)
+	case "DELETE":
+		s.Files = []FileRef{{Name: p.next().Text}}
+		p.optional("RECORD")
+		err = p.conditionalPhrases(&s, "END-DELETE")
+	case "START":
+		err = p.start(&s)
+	case "CALL":
+		err = p.call(&s)
 	case "SORT":
 		err = p.sort(&s)
 	case "STOP":
@@ -801,6 +812,14 @@ func (p *statementParser) read(s *Statement) error {
 		}
 		s.Writes = append(s.Writes, into)
 	}
+	if p.optional("KEY") {
+		p.optional("IS")
+		key, err := p.operand()
+		if err != nil {
+			return err
+		}
+		s.Reads = append(s.Reads, key)
+	}
 	return p.conditionalPhrases(s, "END-"+s.Verb)
 }
 
@@ -829,7 +848,62 @@ func (p *statementParser) write(s *Statement) error {
 	if s.Verb == "RELEASE" {
 		return nil
 	}
-	return p.conditionalPhrases(s, "END-WRITE")
+	return p.conditionalPhrases(s, "END-"+s.Verb)
+}
+
+// start parses START file [KEY IS relation key], which positions an
+// indexed file for reading on from the key.
+func (p *statementParser) start(s *Statement) error {
+	s.Files = []FileRef{{Name: p.next().Text}}
+	if p.optional("KEY") {
+		p.optional("IS")
+		p.optional("NOT")
+		if _, ok := p.relationalOperator(); !ok {
+			return fmt.Errorf("START %s: KEY without a relation", s.Files[0].Name)
+		}
+		key, err := p.operand()
+		if err != nil {
+			return err
+		}
+		s.Reads = append(s.Reads, key)
+	}
+	return p.conditionalPhrases(s, "END-START")
+}
+
+// call parses CALL program [USING [BY REFERENCE | BY CONTENT] items].
+// Items passed by reference may be changed by the program called, so they
+// are both read and written; those by content only read.
+func (p *statementParser) call(s *Statement) error {
+	program, err := p.operand()
+	if err != nil {
+		return err
+	}
+	if program.Name != "" {
+		s.Reads = append(s.Reads, program)
+	} else {
+		s.Calls = strings.Trim(program.Text, "'\"")
+	}
+	if p.optional("USING") {
+		byContent := false
+		for {
+			if p.optional("BY") {
+				byContent = p.optional("CONTENT")
+				p.optional("REFERENCE")
+			}
+			items, err := p.operands()
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				break
+			}
+			s.Reads = append(s.Reads, items...)
+			if !byContent {
+				s.Writes = append(s.Writes, items...)
+			}
+		}
+	}
+	return p.conditionalPhrases(s, "END-CALL")
 }
 
 // sort parses SORT file ON ASCENDING KEY keys, then USING files or an
@@ -887,8 +961,10 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string) er
 		case p.optional("INVALID"):
 			p.optional("KEY")
 			kind = "INVALID KEY"
-		case p.optional("ON") || p.peek().Is("SIZE") || p.peek().Is("OVERFLOW"):
-			if p.optional("OVERFLOW") {
+		case p.optional("ON") || p.peek().Is("SIZE") || p.peek().Is("OVERFLOW") || p.peek().Is("EXCEPTION"):
+			if p.optional("EXCEPTION") {
+				kind = "ON EXCEPTION"
+			} else if p.optional("OVERFLOW") {
 				kind = "ON OVERFLOW"
 			} else {
 				if err := p.expect("SIZE"); err != nil {

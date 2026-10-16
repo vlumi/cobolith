@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestLinkage(t *testing.T) {
+	p, err := ReadProgram("testdata/program/CALLED.cbl", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range p.Linkage {
+		names = append(names, e.Name)
+	}
+	if want := []string{"LK-REQUEST", "LK-CODE", "LK-AMOUNT", "LK-RESPONSE"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("linkage %q, want %q", names, want)
+	}
+	if want := []string{"LK-REQUEST", "LK-RESPONSE"}; !reflect.DeepEqual(p.Using, want) {
+		t.Errorf("using %q, want %q", p.Using, want)
+	}
+	if len(p.Paragraphs) != 1 || p.Paragraphs[0].Name != "MAIN-PARA" || len(p.Paragraphs[0].Statements) != 2 {
+		t.Errorf("paragraphs %+v, want MAIN-PARA with two statements", p.Paragraphs)
+	}
+}
+
 func TestReadProgram(t *testing.T) {
 	p, err := ReadProgram("testdata/program/SAMPLE.cbl", []string{"testdata/program"})
 	if err != nil {

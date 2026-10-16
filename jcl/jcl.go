@@ -71,8 +71,12 @@ const (
 //
 // DSN=NAME(+1) is a generation of the generation data group NAME, relative
 // to the newest generation when the job started: (0) is that one, (-1) the
-// one before, (+1) the next. DSN=&&NAME is a temporary dataset that exists
-// only while the job runs.
+// one before, (+1) the next. DSN=NAME of a generation data group is every
+// generation it has, newest first. DSN=&&NAME is a temporary dataset that
+// exists only while the job runs.
+//
+// A DD statement without a name continues the one before: the program
+// reads the datasets of both, one after the other, as one file.
 type DD struct {
 	Name       string
 	DSN        string // without the generation or the &&
@@ -84,6 +88,8 @@ type DD struct {
 	Sysout     bool
 	Dummy      bool
 	Line       int
+	// Concatenated are the datasets read after this one.
+	Concatenated []DD
 }
 
 // statement is one JCL statement with its continuation lines joined.
@@ -129,10 +135,29 @@ func (job *Job) add(s statement) error {
 			return err
 		}
 		step := &job.Steps[len(job.Steps)-1]
+		if dd.Name == "" {
+			return step.concatenate(dd)
+		}
 		step.DDs = append(step.DDs, dd)
 	default:
 		return fmt.Errorf("unknown operation %q", s.operation)
 	}
+	return nil
+}
+
+// concatenate adds a DD without a name to the step's last DD. Only
+// datasets that are read can be concatenated.
+func (step *Step) concatenate(dd DD) error {
+	if len(step.DDs) == 0 {
+		return fmt.Errorf("a DD without a name comes first in step %s", step.Name)
+	}
+	head := &step.DDs[len(step.DDs)-1]
+	for _, d := range []DD{*head, dd} {
+		if d.DSN == "" || d.Disp != Shr && d.Disp != Old {
+			return fmt.Errorf("DD %s: only datasets read with DISP=SHR or OLD can be concatenated", head.Name)
+		}
+	}
+	head.Concatenated = append(head.Concatenated, dd)
 	return nil
 }
 
@@ -167,13 +192,15 @@ func readStatements(r io.Reader) ([]statement, error) {
 	return statements, scanner.Err()
 }
 
+// splitStatement splits a statement into its name, from column 3, its
+// operation and its operands. Only a DD statement may go without a name.
 func splitStatement(line string, lineNo int) (statement, error) {
-	if strings.HasPrefix(line, "// ") {
-		return statement{}, fmt.Errorf("line %d: a statement needs a name in column 3", lineNo)
-	}
 	fields := strings.Fields(line[2:])
-	if len(fields) < 2 {
-		return statement{}, fmt.Errorf("line %d: a statement needs a name and an operation", lineNo)
+	if strings.HasPrefix(line, "// ") {
+		fields = append([]string{""}, fields...)
+	}
+	if len(fields) < 2 || fields[0] == "" && fields[1] != "DD" {
+		return statement{}, fmt.Errorf("line %d: a statement needs a name in column 3 and an operation", lineNo)
 	}
 	s := statement{name: fields[0], operation: fields[1], line: lineNo}
 	if len(fields) > 2 {

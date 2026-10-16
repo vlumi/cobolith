@@ -53,18 +53,21 @@ func TestParse(t *testing.T) {
 
 func TestParseErrors(t *testing.T) {
 	tests := map[string]string{
-		"no JOB":          "//VALID EXEC PGM=TXVALID\n",
-		"DD before EXEC":  "//J JOB\n//IN DD DSN=A,DISP=SHR\n",
-		"no PGM":          "//J JOB\n//S EXEC COND=(4,LT)\n",
-		"bad operator":    "//J JOB\n//S EXEC PGM=P,COND=(4,XX)\n",
-		"new without DCB": "//J JOB\n//S EXEC PGM=P\n//OUT DD DSN=A,DISP=NEW\n",
-		"unknown DISP":    "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=KEEP\n",
-		"bad generation":  "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A(X),DISP=SHR\n",
-		"temp generation": "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=&&A(+1),DISP=SHR\n",
-		"dummy and DSN":   "//J JOB\n//S EXEC PGM=P\n//IN DD DUMMY,DSN=A,DISP=SHR\n",
-		"variable RECFM":  "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,DCB=(RECFM=VB,LRECL=80)\n",
-		"no name":         "//J JOB\n// EXEC PGM=P\n",
-		"not a statement": "//J JOB\nEXEC PGM=P\n",
+		"no JOB":              "//VALID EXEC PGM=TXVALID\n",
+		"DD before EXEC":      "//J JOB\n//IN DD DSN=A,DISP=SHR\n",
+		"no PGM":              "//J JOB\n//S EXEC COND=(4,LT)\n",
+		"bad operator":        "//J JOB\n//S EXEC PGM=P,COND=(4,XX)\n",
+		"new without DCB":     "//J JOB\n//S EXEC PGM=P\n//OUT DD DSN=A,DISP=NEW\n",
+		"unknown DISP":        "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=KEEP\n",
+		"bad generation":      "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A(X),DISP=SHR\n",
+		"temp generation":     "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=&&A(+1),DISP=SHR\n",
+		"dummy and DSN":       "//J JOB\n//S EXEC PGM=P\n//IN DD DUMMY,DSN=A,DISP=SHR\n",
+		"variable RECFM":      "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,DCB=(RECFM=VB,LRECL=80)\n",
+		"no name":             "//J JOB\n// EXEC PGM=P\n",
+		"not a statement":     "//J JOB\nEXEC PGM=P\n",
+		"concatenated first":  "//J JOB\n//S EXEC PGM=P\n// DD DSN=A,DISP=SHR\n",
+		"concatenated output": "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=SHR\n// DD DSN=B,DISP=MOD\n",
+		"concatenated sysout": "//J JOB\n//S EXEC PGM=P\n//IN DD SYSOUT=*\n// DD DSN=B,DISP=SHR\n",
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -93,6 +96,27 @@ func TestParseDatasetKinds(t *testing.T) {
 		{Name: "WORK", DSN: "SORTED", Temporary: true, Disp: New, LRECL: 80, Line: 5},
 		{Name: "LOG", DSN: "TRAN.AUDIT", Generation: 1, Relative: true, Disp: Mod, Line: 6},
 		{Name: "NONE", Dummy: true, Line: 7},
+	}
+	if !reflect.DeepEqual(job.Steps[0].DDs, want) {
+		t.Errorf("got  %+v\nwant %+v", job.Steps[0].DDs, want)
+	}
+}
+
+func TestParseConcatenation(t *testing.T) {
+	job, err := Parse(strings.NewReader(`//J JOB
+//S        EXEC PGM=P
+//AUDIT    DD DSN=TRAN.AUDIT,DISP=SHR
+//         DD DSN=TRAN.AUDIT(+1),DISP=SHR
+//OUT      DD SYSOUT=*
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DD{
+		{Name: "AUDIT", DSN: "TRAN.AUDIT", Disp: Shr, Line: 3, Concatenated: []DD{
+			{DSN: "TRAN.AUDIT", Generation: 1, Relative: true, Disp: Shr, Line: 4},
+		}},
+		{Name: "OUT", Sysout: true, Line: 5},
 	}
 	if !reflect.DeepEqual(job.Steps[0].DDs, want) {
 		t.Errorf("got  %+v\nwant %+v", job.Steps[0].DDs, want)

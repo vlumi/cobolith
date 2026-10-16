@@ -43,14 +43,16 @@ type FileDescription struct {
 	Pos     Pos
 }
 
-// Paragraph is a paragraph of the procedure division and the tokens of its
-// body. Paragraphs before the first section header have no section.
+// Paragraph is a paragraph of the procedure division: the tokens of its
+// body and the statements they make. Paragraphs before the first section
+// header have no section.
 type Paragraph struct {
-	Name    string
-	Section string
-	Body    []Token
-	Comment []string
-	Pos     Pos
+	Name       string
+	Section    string
+	Body       []Token
+	Statements []Statement
+	Comment    []string
+	Pos        Pos
 }
 
 // ReadProgram reads and parses a program, expanding its copybooks.
@@ -248,20 +250,24 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 	return nil
 }
 
-// parseProcedure splits the procedure division into paragraphs. A header is
-// a name in area A followed by a period, or by SECTION and a period.
+// parseProcedure splits the procedure division into paragraphs and parses
+// their statements. A header is a name in area A followed by a period, or by
+// SECTION and a period.
 func (p *Program) parseProcedure(tokens []Token) error {
 	section := ""
+	procedures := map[string]bool{}
 	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
 		switch {
 		case !t.Pos.InAreaA() || t.Kind != Word:
 		case i+2 < len(tokens) && tokens[i+1].Is("SECTION") && tokens[i+2].Kind == Period:
 			section = t.Text
+			procedures[t.Text] = true
 			i += 2
 			continue
 		case i+1 < len(tokens) && tokens[i+1].Kind == Period:
 			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Comment: t.Comment, Pos: t.Pos})
+			procedures[t.Text] = true
 			i++
 			continue
 		}
@@ -270,6 +276,13 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		}
 		last := &p.Paragraphs[len(p.Paragraphs)-1]
 		last.Body = append(last.Body, t)
+	}
+	for i := range p.Paragraphs {
+		statements, err := ParseStatements(p.Paragraphs[i].Body, procedures)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p.Paragraphs[i].Name, err)
+		}
+		p.Paragraphs[i].Statements = statements
 	}
 	return nil
 }

@@ -11,7 +11,10 @@ import (
 // condition it tests, and the statements nested in it. EXIT keeps what it
 // exits in its verb: EXIT PROGRAM, EXIT PARAGRAPH.
 type Statement struct {
-	Verb       string
+	Verb string
+	// Text is the statement as written; for one with statements nested in
+	// it, its head, before them: IF A = 1, READ ACCT-IN.
+	Text       string
 	Pos        Pos
 	Reads      []Operand
 	Writes     []Operand
@@ -91,11 +94,13 @@ func isTerminator(t Token) bool {
 	return t.Kind == Word && strings.HasPrefix(t.Text, "END-")
 }
 
-// statementParser parses the statements of a paragraph body.
+// statementParser parses the statements of a paragraph body. Starts are
+// the token indexes where the statements being parsed begin.
 type statementParser struct {
 	tokens     []Token
 	i          int
 	procedures map[string]bool
+	starts     []int
 }
 
 // ParseStatements parses a paragraph body into statements, sentence by
@@ -172,8 +177,11 @@ func (p *statementParser) statements() ([]Statement, error) {
 }
 
 func (p *statementParser) statement() (Statement, error) {
+	start := p.i
 	verb := p.next()
 	s := Statement{Verb: verb.Text, Pos: verb.Pos}
+	p.starts = append(p.starts, start)
+	defer func() { p.starts = p.starts[:len(p.starts)-1] }()
 	var err error
 	switch verb.Text {
 	case "MOVE":
@@ -219,7 +227,32 @@ func (p *statementParser) statement() (Statement, error) {
 	if err != nil {
 		return Statement{}, fmt.Errorf("%s: %s: %w", verb.Pos, verb.Text, err)
 	}
+	if s.Text == "" {
+		p.head(&s)
+	}
 	return s, nil
+}
+
+// head sets a statement's text to its tokens so far: called before the
+// statements nested in it, or at its end.
+func (p *statementParser) head(s *Statement) {
+	if s.Text == "" {
+		s.Text = joinTokens(p.tokens[p.starts[len(p.starts)-1]:p.i])
+	}
+}
+
+// joinTokens writes tokens as COBOL text, with parentheses snug.
+func joinTokens(tokens []Token) string {
+	var b strings.Builder
+	for i, t := range tokens {
+		snug := i == 0 || t.Kind == RParen || tokens[i-1].Kind == LParen ||
+			t.Kind == LParen && tokens[i-1].Kind == Word && !keywords[tokens[i-1].Text] && !arithmeticOperators[tokens[i-1].Text]
+		if !snug {
+			b.WriteByte(' ')
+		}
+		b.WriteString(t.String())
+	}
+	return b.String()
 }
 
 // operand parses a data item with its subscripts or reference
@@ -497,6 +530,7 @@ func (p *statementParser) ifStatement(s *Statement) error {
 		return err
 	}
 	s.Condition = condition
+	p.head(s)
 	p.optional("THEN")
 	then, err := p.statements()
 	if err != nil {
@@ -534,6 +568,7 @@ func (p *statementParser) evaluate(s *Statement) error {
 			break
 		}
 	}
+	p.head(s)
 	for p.peek().Is("WHEN") {
 		var alternatives []*Condition
 		kind := "WHEN"
@@ -624,6 +659,7 @@ func (p *statementParser) perform(s *Statement) error {
 	if err := p.performPhrase(s); err != nil {
 		return err
 	}
+	p.head(s)
 	if outOfLine {
 		return nil
 	}
@@ -715,6 +751,7 @@ func (p *statementParser) search(s *Statement) error {
 		}
 		s.Writes = append(s.Writes, index)
 	}
+	p.head(s)
 	if err := p.conditionalPhrases(s, ""); err != nil {
 		return err
 	}
@@ -832,6 +869,7 @@ func (p *statementParser) sort(s *Statement) error {
 // OVERFLOW, and their NOT forms, each as a branch, then the statement's
 // scope terminator if one is given and present.
 func (p *statementParser) conditionalPhrases(s *Statement, terminator string) error {
+	p.head(s)
 	for {
 		start := p.i
 		negated := p.optional("NOT")

@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// copybookExtensions are tried in order when looking up a copybook by name.
-var copybookExtensions = []string{".cpy", ".CPY", ".cbl"}
+// CopybookExtensions are tried in order when looking up a copybook by name.
+var CopybookExtensions = []string{".cpy", ".CPY", ".cbl"}
 
 // Read lexes a source file and expands its COPY statements with the tokens
 // of the copybooks, found by name in the copybook directories. Expanded
@@ -193,7 +193,7 @@ func isTag(word string) bool {
 
 func findCopybook(name string, dirs []string) (string, error) {
 	for _, dir := range dirs {
-		for _, ext := range copybookExtensions {
+		for _, ext := range CopybookExtensions {
 			path := filepath.Join(dir, name+ext)
 			if _, err := os.Stat(path); err == nil {
 				return path, nil

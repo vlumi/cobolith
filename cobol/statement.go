@@ -100,15 +100,18 @@ type statementParser struct {
 	tokens     []Token
 	i          int
 	procedures map[string]bool
+	conditions map[string]bool
 	starts     []int
 }
 
 // ParseStatements parses a paragraph body into statements, sentence by
 // sentence. Procedures are the program's paragraph and section names,
-// which tell PERFORM name from an inline PERFORM. A verb outside the
-// subset Copal knows is an error.
-func ParseStatements(body []Token, procedures map[string]bool) ([]Statement, error) {
-	p := &statementParser{tokens: body, procedures: procedures}
+// which tell PERFORM name from an inline PERFORM; conditions are its
+// condition names (level 88), which tell IF A = B OR C, where C is the
+// object of an abbreviated relation, from IF A = B OR C with C a condition
+// name. A verb outside the subset Copal knows is an error.
+func ParseStatements(body []Token, procedures, conditions map[string]bool) ([]Statement, error) {
+	p := &statementParser{tokens: body, procedures: procedures, conditions: conditions}
 	var all []Statement
 	for !p.done() {
 		statements, err := p.statements()
@@ -322,6 +325,7 @@ var arithmeticOperators = map[string]bool{"+": true, "-": true, "*": true, "/": 
 func (p *statementParser) expression() (Operand, error) {
 	var texts []string
 	var refs []string
+	var single Operand
 	pos := p.peek().Pos
 	for {
 		t := p.peek()
@@ -356,17 +360,17 @@ func (p *statementParser) expression() (Operand, error) {
 			}
 			texts = append(texts, op.Text)
 			refs = append(refs, op.Refs...)
+			single = op
 		}
 		if t := p.peek(); t.Kind != Word || !arithmeticOperators[t.Text] {
 			break
 		}
 		texts = append(texts, p.next().Text)
 	}
-	op := Operand{Text: strings.Join(texts, " "), Refs: refs, Pos: pos}
-	if len(texts) == 1 && len(refs) > 0 && refs[0] == strings.SplitN(texts[0], "(", 2)[0] {
-		op.Name = refs[0]
+	if len(texts) == 1 && single.Text == texts[0] {
+		return single, nil
 	}
-	return op, nil
+	return Operand{Text: strings.Join(texts, " "), Refs: refs, Pos: pos}, nil
 }
 
 // operands parses operands up to a keyword, verb, terminator or period,

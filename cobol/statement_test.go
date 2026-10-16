@@ -131,6 +131,32 @@ func TestStatementText(t *testing.T) {
 	}
 }
 
+// An identifier after OR is the object of an abbreviated relation, unless
+// it is a condition name; a qualified condition name is one too.
+func TestConditionNames(t *testing.T) {
+	conditions := map[string]bool{"AM-OPEN": true}
+	for source, want := range map[string]string{
+		"IF A = B OR C CONTINUE.":                "A = B OR A = C",
+		"IF A = B OR AM-OPEN CONTINUE.":          "A = B OR AM-OPEN",
+		"IF AM-OPEN OF ACCT-RECORD CONTINUE.":    "AM-OPEN OF ACCT-RECORD",
+		"IF C AND A = B CONTINUE.":               "C AND A = B",
+		"IF A NOT = B AND NOT AM-OPEN CONTINUE.": "A NOT = B AND NOT AM-OPEN",
+	} {
+		tokens, err := Lex("test", []byte("           "+source+"\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		statements, err := ParseStatements(tokens, nil, conditions)
+		if err != nil {
+			t.Errorf("%s: %v", source, err)
+			continue
+		}
+		if got := statements[0].Condition.String(); got != want {
+			t.Errorf("%s: condition %s, want %s", source, got, want)
+		}
+	}
+}
+
 func TestStatementErrors(t *testing.T) {
 	procedures := map[string]bool{"P": true}
 	for _, source := range []string{
@@ -143,7 +169,7 @@ func TestStatementErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ParseStatements(tokens, procedures); err == nil {
+		if _, err := ParseStatements(tokens, procedures, nil); err == nil {
 			t.Errorf("%s: parsed without error", source)
 		}
 	}

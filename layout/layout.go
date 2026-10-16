@@ -29,6 +29,7 @@ type Field struct {
 	Occurs      int
 	OccursMin   int
 	DependingOn string
+	IndexedBy   []string
 	Values      []string
 	Comment     []string
 	Conditions  []Condition
@@ -106,6 +107,7 @@ func newField(e *cobol.DataEntry) *Field {
 		Occurs:      e.Occurs,
 		OccursMin:   e.OccursMin,
 		DependingOn: e.DependingOn,
+		IndexedBy:   e.IndexedBy,
 		Values:      e.Values,
 		Comment:     e.Comment,
 		Pos:         e.Pos,

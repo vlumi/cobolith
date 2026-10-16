@@ -61,8 +61,9 @@ func TestReadProgram(t *testing.T) {
 	}
 
 	item := p.WorkingStorage[3]
-	if item.Name != "WS-ITEM" || item.OccursMin != 0 || item.Occurs != 20 || item.DependingOn != "WS-COUNT" {
-		t.Errorf("WS-ITEM %+v, want OCCURS 0 TO 20 DEPENDING ON WS-COUNT", item)
+	if item.Name != "WS-ITEM" || item.OccursMin != 0 || item.Occurs != 20 || item.DependingOn != "WS-COUNT" ||
+		!reflect.DeepEqual(item.IndexedBy, []string{"WS-IX"}) {
+		t.Errorf("WS-ITEM %+v, want OCCURS 0 TO 20 DEPENDING ON WS-COUNT INDEXED BY WS-IX", item)
 	}
 	if passing := p.WorkingStorage[5]; !reflect.DeepEqual(passing.Values, []string{"5 THRU 9"}) {
 		t.Errorf("PASSING values %q, want 5 THRU 9", passing.Values)

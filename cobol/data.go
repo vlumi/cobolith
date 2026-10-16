@@ -17,6 +17,7 @@ type DataEntry struct {
 	Occurs      int // 0 when the item does not repeat; the maximum for DEPENDING ON
 	OccursMin   int
 	DependingOn string
+	IndexedBy   []string // the index names of an OCCURS table
 	Values      []string // VALUE literals; for level 88, ranges as "A THRU B"
 	Comment     []string // the comment lines before the entry
 	Pos         Pos
@@ -96,7 +97,8 @@ func (e *DataEntry) setUsage(t Token) error {
 	return nil
 }
 
-// parseOccurs parses OCCURS n [TIMES] or OCCURS n TO m [TIMES] DEPENDING [ON] x.
+// parseOccurs parses OCCURS n [TIMES] or OCCURS n TO m [TIMES] DEPENDING
+// [ON] x, either followed by INDEXED [BY] and index names.
 func (e *DataEntry) parseOccurs(c *cursor) error {
 	n, err := c.number()
 	if err != nil {
@@ -113,6 +115,15 @@ func (e *DataEntry) parseOccurs(c *cursor) error {
 	if c.optional("DEPENDING") {
 		c.optional("ON")
 		e.DependingOn = c.next().Text
+	}
+	if c.optional("INDEXED") {
+		c.optional("BY")
+		for !c.done() && !isClause(c.peek().Text) {
+			e.IndexedBy = append(e.IndexedBy, c.next().Text)
+		}
+		if len(e.IndexedBy) == 0 {
+			return fmt.Errorf("%s: %s: INDEXED BY without an index name", e.Pos, e.Name)
+		}
 	}
 	return nil
 }

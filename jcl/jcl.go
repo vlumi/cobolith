@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -106,6 +107,20 @@ type statement struct {
 	operands  string
 	comment   []string
 	line      int
+}
+
+// ParseFile reads a job from a file.
+func ParseFile(path string) (*Job, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	job, err := Parse(f)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return job, nil
 }
 
 // Parse reads a job from r.
@@ -209,8 +224,6 @@ func readStatements(r io.Reader) ([]statement, error) {
 	return statements, scanner.Err()
 }
 
-// splitStatement splits a statement into its name, from column 3, its
-// operation and its operands. Only a DD statement may go without a name.
 // splitBanner splits the comment lines before the first step into the
 // job's banner, from a rule of = signs to the next, and the step's own.
 func splitBanner(lines []string) (banner, rest []string) {
@@ -229,6 +242,8 @@ func splitBanner(lines []string) (banner, rest []string) {
 	return lines, nil
 }
 
+// splitStatement splits a statement into its name, from column 3, its
+// operation and its operands. Only a DD statement may go without a name.
 func splitStatement(line string, lineNo int) (statement, error) {
 	fields := strings.Fields(line[2:])
 	if strings.HasPrefix(line, "// ") {

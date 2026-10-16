@@ -149,3 +149,12 @@ func TestCondBypasses(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFile(t *testing.T) {
+	if job, err := ParseFile("../pangaea/jobs/MONTHLY.jcl"); err != nil || job.Name != "MONTHLY" || len(job.Steps) != 2 {
+		t.Errorf("MONTHLY.jcl: %+v, %v", job, err)
+	}
+	if _, err := ParseFile("no/such.jcl"); err == nil {
+		t.Error("parsed a file that does not exist")
+	}
+}

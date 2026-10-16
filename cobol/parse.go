@@ -31,6 +31,8 @@ type FileControl struct {
 	Name         string
 	Assign       string
 	Organization string
+	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
+	RecordKey    string // an indexed file's key
 	Status       string
 	Pos          Pos
 }
@@ -177,12 +179,12 @@ func (p *Program) parseEnvironment(tokens []Token) error {
 }
 
 // parseSelect parses SELECT [OPTIONAL] name ASSIGN [TO] target and the
-// ORGANIZATION and FILE STATUS clauses.
+// ORGANIZATION, ACCESS MODE, RECORD KEY and FILE STATUS clauses.
 func parseSelect(entry []Token) (FileControl, error) {
 	c := &cursor{tokens: entry}
 	c.next()
 	c.optional("OPTIONAL")
-	file := FileControl{Name: c.next().Text, Organization: "SEQUENTIAL", Pos: entry[0].Pos}
+	file := FileControl{Name: c.next().Text, Organization: "SEQUENTIAL", Access: "SEQUENTIAL", Pos: entry[0].Pos}
 	for !c.done() {
 		clause := c.next()
 		switch {
@@ -195,6 +197,14 @@ func parseSelect(entry []Token) (FileControl, error) {
 			if file.Organization == "LINE" || file.Organization == "RECORD" {
 				file.Organization += " " + c.next().Text
 			}
+		case clause.Is("ACCESS"):
+			c.optional("MODE")
+			c.optional("IS")
+			file.Access = c.next().Text
+		case clause.Is("RECORD"):
+			c.optional("KEY")
+			c.optional("IS")
+			file.RecordKey = c.next().Text
 		case clause.Is("FILE"):
 			if err := c.expect("STATUS"); err != nil {
 				return FileControl{}, err

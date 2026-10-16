@@ -7,6 +7,9 @@ import (
 )
 
 const daily = `//DAILY    JOB
+//*=========*
+//* A DAY   *
+//*=========*
 //* VALIDATE THE DAY'S TRANSACTIONS
 //VALID    EXEC PGM=TXVALID
 //TRANIN   DD DSN=TRAN.DAILY,DISP=SHR
@@ -23,25 +26,27 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &Job{
-		Name: "DAILY",
+		Name:    "DAILY",
+		Comment: []string{"=========*", " A DAY   *", "=========*"},
 		Steps: []Step{
 			{
 				Name:    "VALID",
 				Program: "TXVALID",
-				Line:    3,
+				Comment: []string{" VALIDATE THE DAY'S TRANSACTIONS"},
+				Line:    6,
 				DDs: []DD{
-					{Name: "TRANIN", DSN: "TRAN.DAILY", Disp: Shr, Line: 4},
-					{Name: "TRANOUT", DSN: "TRAN.VALID", Disp: New, LRECL: 80, Line: 5},
-					{Name: "REPORT", Sysout: true, Line: 7},
+					{Name: "TRANIN", DSN: "TRAN.DAILY", Disp: Shr, Line: 7},
+					{Name: "TRANOUT", DSN: "TRAN.VALID", Disp: New, LRECL: 80, Line: 8},
+					{Name: "REPORT", Sysout: true, Line: 10},
 				},
 			},
 			{
 				Name:    "POST",
 				Program: "TXPOST",
 				Cond:    &Cond{Code: 4, Operator: "LT"},
-				Line:    8,
+				Line:    11,
 				DDs: []DD{
-					{Name: "TRANIN", DSN: "TRAN.VALID", Disp: Old, Line: 9},
+					{Name: "TRANIN", DSN: "TRAN.VALID", Disp: Old, Line: 12},
 				},
 			},
 		},

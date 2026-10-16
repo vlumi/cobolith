@@ -1,6 +1,7 @@
-// Package jcl parses Pangaea's job network files, a small subset of IBM JCL:
-// a JOB statement, EXEC statements running programs, and DD statements
-// binding a program's file names to datasets or to the job's output.
+// Package jcl parses job network files in a small subset of IBM JCL: a JOB
+// statement, EXEC statements running programs, and DD statements binding a
+// program's file names to datasets or to the job's output. Pangaea's runner
+// executes them, and Copal reads them to draw the job network.
 package jcl
 
 import (
@@ -11,18 +12,23 @@ import (
 	"strings"
 )
 
-// Job is a parsed job: its name and its steps in order.
+// Job is a parsed job: its name, its steps in order, and the comment
+// banner that describes it: the comment lines after the JOB statement from
+// a rule of = signs to the next.
 type Job struct {
-	Name  string
-	Steps []Step
+	Name    string
+	Comment []string
+	Steps   []Step
 }
 
-// Step runs one program with its files bound by DD statements.
+// Step runs one program with its files bound by DD statements. Comment
+// holds the comment lines before its EXEC statement.
 type Step struct {
 	Name    string
 	Program string
 	Cond    *Cond
 	DDs     []DD
+	Comment []string
 	Line    int
 }
 
@@ -92,11 +98,13 @@ type DD struct {
 	Concatenated []DD
 }
 
-// statement is one JCL statement with its continuation lines joined.
+// statement is one JCL statement with its continuation lines joined, and
+// the text of the comment lines before it, without their //*.
 type statement struct {
 	name      string
 	operation string
 	operands  string
+	comment   []string
 	line      int
 }
 
@@ -110,6 +118,9 @@ func Parse(r io.Reader) (*Job, error) {
 		return nil, fmt.Errorf("line 1: a job starts with a JOB statement")
 	}
 	job := &Job{Name: statements[0].name}
+	if len(statements) > 1 {
+		job.Comment, statements[1].comment = splitBanner(statements[1].comment)
+	}
 	for _, s := range statements[1:] {
 		if err := job.add(s); err != nil {
 			return nil, fmt.Errorf("line %d: %w", s.line, err)
@@ -125,6 +136,7 @@ func (job *Job) add(s statement) error {
 		if err != nil {
 			return err
 		}
+		step.Comment = s.comment
 		job.Steps = append(job.Steps, step)
 	case "DD":
 		if len(job.Steps) == 0 {
@@ -166,12 +178,16 @@ func (step *Step) concatenate(dd DD) error {
 // on the next line. Text after the operand field is a comment.
 func readStatements(r io.Reader) ([]statement, error) {
 	var statements []statement
+	var comment []string
 	continuing := false
 	scanner := bufio.NewScanner(r)
 	for lineNo := 1; scanner.Scan(); lineNo++ {
 		line := strings.TrimRight(scanner.Text(), " ")
 		switch {
-		case line == "" || strings.HasPrefix(line, "//*"):
+		case line == "":
+			continue
+		case strings.HasPrefix(line, "//*"):
+			comment = append(comment, line[3:])
 			continue
 		case !strings.HasPrefix(line, "//"):
 			return nil, fmt.Errorf("line %d: a statement starts with //", lineNo)
@@ -185,6 +201,7 @@ func readStatements(r io.Reader) ([]statement, error) {
 			if err != nil {
 				return nil, err
 			}
+			s.comment, comment = comment, nil
 			statements = append(statements, s)
 			continuing = strings.HasSuffix(s.operands, ",")
 		}
@@ -194,6 +211,24 @@ func readStatements(r io.Reader) ([]statement, error) {
 
 // splitStatement splits a statement into its name, from column 3, its
 // operation and its operands. Only a DD statement may go without a name.
+// splitBanner splits the comment lines before the first step into the
+// job's banner, from a rule of = signs to the next, and the step's own.
+func splitBanner(lines []string) (banner, rest []string) {
+	isRule := func(line string) bool {
+		t := strings.Trim(strings.TrimSpace(line), "*")
+		return t != "" && strings.Trim(t, "=") == ""
+	}
+	if len(lines) == 0 || !isRule(lines[0]) {
+		return nil, lines
+	}
+	for i := 1; i < len(lines); i++ {
+		if isRule(lines[i]) {
+			return lines[:i+1], lines[i+1:]
+		}
+	}
+	return lines, nil
+}
+
 func splitStatement(line string, lineNo int) (statement, error) {
 	fields := strings.Fields(line[2:])
 	if strings.HasPrefix(line, "// ") {

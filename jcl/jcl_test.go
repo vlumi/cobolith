@@ -58,7 +58,10 @@ func TestParseErrors(t *testing.T) {
 		"no PGM":          "//J JOB\n//S EXEC COND=(4,LT)\n",
 		"bad operator":    "//J JOB\n//S EXEC PGM=P,COND=(4,XX)\n",
 		"new without DCB": "//J JOB\n//S EXEC PGM=P\n//OUT DD DSN=A,DISP=NEW\n",
-		"unknown DISP":    "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=MOD\n",
+		"unknown DISP":    "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=KEEP\n",
+		"bad generation":  "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A(X),DISP=SHR\n",
+		"temp generation": "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=&&A(+1),DISP=SHR\n",
+		"dummy and DSN":   "//J JOB\n//S EXEC PGM=P\n//IN DD DUMMY,DSN=A,DISP=SHR\n",
 		"variable RECFM":  "//J JOB\n//S EXEC PGM=P\n//O DD DSN=A,DISP=NEW,DCB=(RECFM=VB,LRECL=80)\n",
 		"no name":         "//J JOB\n// EXEC PGM=P\n",
 		"not a statement": "//J JOB\nEXEC PGM=P\n",
@@ -69,6 +72,30 @@ func TestParseErrors(t *testing.T) {
 				t.Error("parsed without error")
 			}
 		})
+	}
+}
+
+func TestParseDatasetKinds(t *testing.T) {
+	job, err := Parse(strings.NewReader(`//J JOB
+//S EXEC PGM=P
+//OLDM DD DSN=ACCT.MASTER(0),DISP=SHR
+//NEWM DD DSN=ACCT.MASTER(+1),DISP=NEW,DCB=(RECFM=FB,LRECL=100)
+//WORK DD DSN=&&SORTED,DISP=NEW,DCB=(RECFM=FB,LRECL=80)
+//LOG  DD DSN=TRAN.AUDIT(+1),DISP=MOD
+//NONE DD DUMMY
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DD{
+		{Name: "OLDM", DSN: "ACCT.MASTER", Relative: true, Disp: Shr, Line: 3},
+		{Name: "NEWM", DSN: "ACCT.MASTER", Generation: 1, Relative: true, Disp: New, LRECL: 100, Line: 4},
+		{Name: "WORK", DSN: "SORTED", Temporary: true, Disp: New, LRECL: 80, Line: 5},
+		{Name: "LOG", DSN: "TRAN.AUDIT", Generation: 1, Relative: true, Disp: Mod, Line: 6},
+		{Name: "NONE", Dummy: true, Line: 7},
+	}
+	if !reflect.DeepEqual(job.Steps[0].DDs, want) {
+		t.Errorf("got  %+v\nwant %+v", job.Steps[0].DDs, want)
 	}
 }
 

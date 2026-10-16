@@ -1,0 +1,83 @@
+package record
+
+import (
+	"testing"
+)
+
+func acctMaster(t *testing.T) *Layout {
+	t.Helper()
+	l, err := FromCopybook("../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+// A record from the daily fixture: account 10006, balance -150.00.
+const eohippus = "000001000600000105EOHIPPUS ELLA       CO2020090920261015000000001500}000030000                      "
+
+func TestRead(t *testing.T) {
+	l := acctMaster(t)
+	r := []byte(eohippus)
+	if name, err := l.Text(r, "AM-SHORT-NAME"); err != nil || name != "EOHIPPUS ELLA" {
+		t.Errorf("name %q, %v", name, err)
+	}
+	if balance, err := l.Number(r, "AM-BALANCE"); err != nil || balance != -15000 {
+		t.Errorf("balance %d, %v, want -15000 cents", balance, err)
+	}
+	if limit, err := l.Number(r, "AM-OVERDRAFT-LIMIT"); err != nil || limit != 30000 {
+		t.Errorf("limit %d, %v, want 30000 cents", limit, err)
+	}
+}
+
+func TestWriteReadsBack(t *testing.T) {
+	l := acctMaster(t)
+	r := l.Blank()
+	for name, value := range map[string]int64{"AM-ACCT-NO": 10006, "AM-CUST-NO": 105, "AM-OPEN-DATE": 20200909,
+		"AM-LAST-ACTIVITY-DATE": 20261015, "AM-BALANCE": -15000, "AM-OVERDRAFT-LIMIT": 30000} {
+		if err := l.SetNumber(r, name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, text := range map[string]string{"AM-SHORT-NAME": "EOHIPPUS ELLA", "AM-ACCT-TYPE": "C", "AM-STATUS": "O"} {
+		if err := l.SetText(r, name, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if string(r) != eohippus {
+		t.Errorf("wrote\n%q\nwant\n%q", r, eohippus)
+	}
+	if err := l.SetNumber(r, "AM-BALANCE", 52); err != nil || string(r[56:69]) != "000000000005B" {
+		t.Errorf("0.52 written as %q, %v", r[56:69], err)
+	}
+}
+
+func TestErrors(t *testing.T) {
+	l := acctMaster(t)
+	r := l.Blank()
+	if err := l.SetNumber(r, "AM-OVERDRAFT-LIMIT", -1); err == nil {
+		t.Error("wrote a negative number into an unsigned field")
+	}
+	if err := l.SetNumber(r, "AM-ACCT-NO", 12345678901); err == nil {
+		t.Error("wrote 11 digits into 10")
+	}
+	if err := l.SetText(r, "AM-STATUS", "OPEN"); err == nil {
+		t.Error("wrote 4 characters into 1")
+	}
+	if _, err := l.Number(r, "AM-SHORT-NAME"); err == nil {
+		t.Error("read a text field as a number")
+	}
+	if _, err := l.Number(r[:10], "AM-ACCT-NO"); err == nil {
+		t.Error("read a short record")
+	}
+}
+
+func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
+	l, err := FromCopybook("../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Text(l.Blank(), "FILLER"); err == nil {
+		t.Error("looked up FILLER, which TRAN-RECORD has three of")
+	}
+}

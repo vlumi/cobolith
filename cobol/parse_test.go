@@ -82,3 +82,13 @@ func TestParseDataEntryErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestReadDataEntries(t *testing.T) {
+	entries, err := ReadDataEntries("testdata/program/HOLDREC.cpy", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 9 || entries[0].Name != "HOLD-RECORD" || entries[8].Name != "FILLER" {
+		t.Errorf("entries %+v, want the 9 entries of HOLD-RECORD", entries)
+	}
+}

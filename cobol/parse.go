@@ -303,3 +303,20 @@ func (c *cursor) number() (int, error) {
 	}
 	return n, nil
 }
+
+// ReadDataEntries reads a copybook that holds data description entries.
+func ReadDataEntries(path string, copybookDirs []string) ([]*DataEntry, error) {
+	tokens, err := Read(path, copybookDirs)
+	if err != nil {
+		return nil, err
+	}
+	var out []*DataEntry
+	for _, tokens := range entries(tokens) {
+		entry, err := ParseDataEntry(tokens)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}

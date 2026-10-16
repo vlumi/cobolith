@@ -23,6 +23,9 @@ type Statement struct {
 	// Calls is the program a CALL calls, when it is named by a literal;
 	// a CALL through a data item reads the item instead.
 	Calls string
+	// Device is what an ACCEPT reads from or a DISPLAY writes to, as its
+	// FROM or UPON names it; empty for SYSIN and SYSOUT, the job's.
+	Device string
 	// Condition is what an IF tests, or the UNTIL of a PERFORM.
 	Condition *Condition
 	Branches  []Branch
@@ -541,7 +544,8 @@ func (p *statementParser) display(s *Statement) error {
 		s.Reads = ops
 	}
 	if p.optional("UPON", "FROM") {
-		p.next()
+		s.Device = p.next().Text
+		p.optional("YYYYMMDD", "YYYYDDD")
 	}
 	if p.optional("WITH") {
 		p.optional("NO")

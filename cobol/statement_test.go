@@ -27,6 +27,9 @@ func describe(b *strings.Builder, statements []Statement, indent string) {
 		if s.Calls != "" {
 			b.WriteString(" calls " + s.Calls)
 		}
+		if s.Device != "" {
+			b.WriteString(" device " + s.Device)
+		}
 		for _, list := range []struct {
 			label string
 			ops   []Operand
@@ -152,7 +155,9 @@ func TestIndexedAndCalls(t *testing.T) {
            ACCEPT WS-REQUEST
                ON EXCEPTION SET END-OF-INPUT TO TRUE
                NOT ON EXCEPTION DISPLAY WS-REQUEST
-           END-ACCEPT.
+           END-ACCEPT
+           ACCEPT WS-DATE FROM DATE YYYYMMDD
+           DISPLAY 'NO REQUEST' UPON SYSERR.
 `
 	tokens, err := Lex("test", []byte(source))
 	if err != nil {
@@ -183,6 +188,8 @@ ACCEPT writes WS-REQUEST
     SET writes END-OF-INPUT
   NOT ON EXCEPTION
     DISPLAY reads WS-REQUEST
+ACCEPT device DATE writes WS-DATE
+DISPLAY device SYSERR reads 'NO REQUEST'
 `
 	if got := b.String(); got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)

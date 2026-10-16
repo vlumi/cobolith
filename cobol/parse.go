@@ -10,10 +10,19 @@ import (
 type Program struct {
 	ID             string
 	Path           string
+	Comment        []string // the comment lines before the program, its header banner
+	Identification []IdentificationEntry
 	Files          []FileControl
 	FileSection    []FileDescription
 	WorkingStorage []*DataEntry
 	Paragraphs     []Paragraph
+}
+
+// IdentificationEntry is an identification paragraph with a comment entry,
+// such as AUTHOR or DATE-WRITTEN.
+type IdentificationEntry struct {
+	Paragraph string
+	Text      string
 }
 
 // FileControl is a SELECT entry: a file and the external name it is
@@ -40,6 +49,7 @@ type Paragraph struct {
 	Name    string
 	Section string
 	Body    []Token
+	Comment []string
 	Pos     Pos
 }
 
@@ -59,6 +69,9 @@ func Parse(path string, tokens []Token) (*Program, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	p := &Program{Path: path}
+	if len(tokens) > 0 {
+		p.Comment = tokens[0].Comment
+	}
 	steps := []struct {
 		division string
 		parse    func([]Token) error
@@ -133,13 +146,16 @@ func entries(tokens []Token) [][]Token {
 
 func (p *Program) parseIdentification(tokens []Token) error {
 	for i, t := range tokens {
-		if t.Is("PROGRAM-ID") {
+		switch {
+		case t.Is("PROGRAM-ID") && p.ID == "":
 			for _, name := range tokens[i+1:] {
 				if name.Kind == Word || name.Kind == String {
 					p.ID = name.Text
-					return nil
+					break
 				}
 			}
+		case t.Kind == CommentEntry:
+			p.Identification = append(p.Identification, IdentificationEntry{Paragraph: tokens[i-2].Text, Text: t.Text})
 		}
 	}
 	return nil
@@ -245,7 +261,7 @@ func (p *Program) parseProcedure(tokens []Token) error {
 			i += 2
 			continue
 		case i+1 < len(tokens) && tokens[i+1].Kind == Period:
-			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Pos: t.Pos})
+			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Comment: t.Comment, Pos: t.Pos})
 			i++
 			continue
 		}

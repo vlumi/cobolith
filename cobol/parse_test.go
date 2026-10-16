@@ -13,10 +13,23 @@ func TestReadProgram(t *testing.T) {
 	if p.ID != "SAMPLE" {
 		t.Errorf("ID %q, want SAMPLE", p.ID)
 	}
+	if want := []string{" SAMPLE: READS HOLD RECORDS"}; !reflect.DeepEqual(p.Comment, want) {
+		t.Errorf("comment %q, want %q", p.Comment, want)
+	}
+	wantIdentification := []IdentificationEntry{{"AUTHOR", "A. N. AUTHOR."}, {"DATE-WRITTEN", "1987-03-12."}}
+	if !reflect.DeepEqual(p.Identification, wantIdentification) {
+		t.Errorf("identification %+v, want %+v", p.Identification, wantIdentification)
+	}
+	if want := []string{" READ ONE RECORD."}; !reflect.DeepEqual(p.Paragraphs[1].Comment, want) {
+		t.Errorf("READ-PARA comment %q, want %q", p.Paragraphs[1].Comment, want)
+	}
+	if want := []string{" A HOLD RECORD"}; !reflect.DeepEqual(p.FileSection[0].Entries[0].Comment, want) {
+		t.Errorf("HOLD-RECORD comment %q, want the copybook's comment", p.FileSection[0].Entries[0].Comment)
+	}
 
 	wantFile := FileControl{
 		Name: "HOLD-FILE", Assign: "HOLDIN", Organization: "LINE SEQUENTIAL", Status: "WS-STATUS",
-		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 6, Col: 12},
+		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 9, Col: 12},
 	}
 	if len(p.Files) != 1 || p.Files[0] != wantFile {
 		t.Errorf("files %+v, want %+v", p.Files, wantFile)

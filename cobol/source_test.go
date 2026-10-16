@@ -102,3 +102,54 @@ func TestLexErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestLexAttachesCommentsToTheNextToken(t *testing.T) {
+	source := fixed(
+		"*=========================",
+		"* MAIN: DOES THE WORK",
+		"*=========================",
+		" MAIN.",
+		"*    A STRAY NOTE",
+		"",
+		"     DISPLAY 'X'.",
+	)
+	tokens, err := Lex("T.cbl", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"=========================", " MAIN: DOES THE WORK", "========================="}
+	if got := tokens[0].Comment; !slices.Equal(got, want) {
+		t.Errorf("MAIN comment %q, want %q", got, want)
+	}
+	if got := tokens[2].Comment; got != nil {
+		t.Errorf("DISPLAY comment %q, want none: the blank line ends the block", got)
+	}
+}
+
+func TestLexCommentEntries(t *testing.T) {
+	source := fixed(
+		" IDENTIFICATION DIVISION.",
+		" PROGRAM-ID. TXPOST.",
+		" AUTHOR. M. O'KESTREL, OPERATIONS.",
+		"         SECOND LINE.",
+		" DATE-WRITTEN. 1987-03-12.",
+		" ENVIRONMENT DIVISION.",
+	)
+	tokens, err := Lex("T.cbl", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []string
+	for _, tok := range tokens {
+		if tok.Kind == CommentEntry {
+			entries = append(entries, tok.Text)
+		}
+	}
+	want := []string{"M. O'KESTREL, OPERATIONS. SECOND LINE.", "1987-03-12."}
+	if !slices.Equal(entries, want) {
+		t.Errorf("comment entries %q, want %q", entries, want)
+	}
+	if last := tokens[len(tokens)-3]; !last.Is("ENVIRONMENT") {
+		t.Errorf("%s after the entries, want ENVIRONMENT", last)
+	}
+}

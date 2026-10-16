@@ -224,8 +224,6 @@ func readStatements(r io.Reader) ([]statement, error) {
 	return statements, scanner.Err()
 }
 
-// splitStatement splits a statement into its name, from column 3, its
-// operation and its operands. Only a DD statement may go without a name.
 // splitBanner splits the comment lines before the first step into the
 // job's banner, from a rule of = signs to the next, and the step's own.
 func splitBanner(lines []string) (banner, rest []string) {
@@ -244,6 +242,8 @@ func splitBanner(lines []string) (banner, rest []string) {
 	return lines, nil
 }
 
+// splitStatement splits a statement into its name, from column 3, its
+// operation and its operands. Only a DD statement may go without a name.
 func splitStatement(line string, lineNo int) (statement, error) {
 	fields := strings.Fields(line[2:])
 	if strings.HasPrefix(line, "// ") {

@@ -4,7 +4,9 @@
 // Numbers are integers in units of the field's scale: 1,520.00 in a field
 // with two decimals is 152000. Signed display numbers carry their sign
 // overpunched on the last digit, EBCDIC style: {ABCDEFGHI for +0 to +9,
-// }JKLMNOPQR for -0 to -9.
+// }JKLMNOPQR for -0 to -9. Packed decimal (COMP-3) numbers hold two digits
+// a byte and the sign in the last half-byte: C positive, D negative, F
+// unsigned.
 package record
 
 import (
@@ -135,17 +137,59 @@ const (
 	negative = "}JKLMNOPQR"
 )
 
-// Number returns a numeric display field's value in units of its scale.
+// Number returns a numeric field's value in units of its scale.
 func (l *Layout) Number(r []byte, name string) (int64, error) {
 	f, b, err := l.numeric(r, name)
 	if err != nil {
 		return 0, err
 	}
+	if f.Usage == "COMP-3" {
+		return unpack(name, b)
+	}
+	return unzone(name, b, f.Signed)
+}
+
+// SetNumber writes a value, in units of the field's scale, into a numeric
+// field.
+func (l *Layout) SetNumber(r []byte, name string, value int64) error {
+	f, b, err := l.numeric(r, name)
+	if err != nil {
+		return err
+	}
+	if value < 0 && !f.Signed {
+		return fmt.Errorf("%s: %d in an unsigned field", name, value)
+	}
+	digits := fmt.Sprintf("%0*d", f.Digits, abs(value))
+	if len(digits) > f.Digits {
+		return fmt.Errorf("%s: %d does not fit in %d digits", name, value, f.Digits)
+	}
+	if f.Usage == "COMP-3" {
+		pack(b, digits, f.Signed, value < 0)
+	} else {
+		zone(b, digits, f.Signed, value < 0)
+	}
+	return nil
+}
+
+func (l *Layout) numeric(r []byte, name string) (*layout.Field, []byte, error) {
+	f, err := l.field(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if f.Category != layout.Numeric || f.Usage != "DISPLAY" && f.Usage != "COMP-3" {
+		return nil, nil, fmt.Errorf("%s: not a numeric display or packed decimal field", name)
+	}
+	b, err := l.bytes(r, f)
+	return f, b, err
+}
+
+// unzone reads a display number, its sign overpunched if it has one.
+func unzone(name string, b []byte, signed bool) (int64, error) {
 	var n int64
 	sign := int64(1)
 	for i, c := range b {
 		digit := strings.IndexByte("0123456789", c)
-		if i == len(b)-1 && f.Signed {
+		if i == len(b)-1 && signed {
 			if d := strings.IndexByte(positive, c); d >= 0 {
 				digit = d
 			} else if d := strings.IndexByte(negative, c); d >= 0 {
@@ -160,42 +204,62 @@ func (l *Layout) Number(r []byte, name string) (int64, error) {
 	return sign * n, nil
 }
 
-// SetNumber writes a value, in units of the field's scale, into a numeric
-// display field.
-func (l *Layout) SetNumber(r []byte, name string, value int64) error {
-	f, b, err := l.numeric(r, name)
-	if err != nil {
-		return err
-	}
-	if value < 0 && !f.Signed {
-		return fmt.Errorf("%s: %d in an unsigned field", name, value)
-	}
-	digits := fmt.Sprintf("%0*d", len(b), abs(value))
-	if len(digits) > len(b) {
-		return fmt.Errorf("%s: %d does not fit in %d digits", name, value, len(b))
-	}
+// zone writes digits as a display number, overpunching the sign.
+func zone(b []byte, digits string, signed, negativeValue bool) {
 	copy(b, digits)
-	if f.Signed {
+	if signed {
 		last := digits[len(digits)-1] - '0'
-		if value < 0 {
+		if negativeValue {
 			b[len(b)-1] = negative[last]
 		} else {
 			b[len(b)-1] = positive[last]
 		}
 	}
-	return nil
 }
 
-func (l *Layout) numeric(r []byte, name string) (*layout.Field, []byte, error) {
-	f, err := l.field(name)
-	if err != nil {
-		return nil, nil, err
+// unpack reads a packed decimal number.
+func unpack(name string, b []byte) (int64, error) {
+	var n int64
+	for i, c := range b {
+		nibbles := []byte{c >> 4, c & 0x0F}
+		if i == len(b)-1 {
+			nibbles = nibbles[:1]
+		}
+		for _, d := range nibbles {
+			if d > 9 {
+				return 0, fmt.Errorf("%s: % X is not packed decimal", name, b)
+			}
+			n = n*10 + int64(d)
+		}
 	}
-	if f.Category != layout.Numeric || f.Usage != "DISPLAY" {
-		return nil, nil, fmt.Errorf("%s: not a numeric display field", name)
+	switch b[len(b)-1] & 0x0F {
+	case 0x0C, 0x0F:
+		return n, nil
+	case 0x0D:
+		return -n, nil
 	}
-	b, err := l.bytes(r, f)
-	return f, b, err
+	return 0, fmt.Errorf("%s: % X has no sign", name, b)
+}
+
+// pack writes digits as a packed decimal number. A field's bytes hold an
+// odd number of digits; an even number of digits gets a leading zero.
+func pack(b []byte, digits string, signed, negativeValue bool) {
+	nibbles := strings.Repeat("0", 2*len(b)-1-len(digits)) + digits
+	sign := byte(0x0F)
+	if signed {
+		sign = 0x0C
+		if negativeValue {
+			sign = 0x0D
+		}
+	}
+	for i := range b {
+		high := nibbles[2*i] - '0'
+		low := sign
+		if 2*i+1 < len(nibbles) {
+			low = nibbles[2*i+1] - '0'
+		}
+		b[i] = high<<4 | low
+	}
 }
 
 func abs(n int64) int64 {

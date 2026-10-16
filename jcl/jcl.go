@@ -1,6 +1,7 @@
-// Package jcl parses Pangaea's job network files, a small subset of IBM JCL:
-// a JOB statement, EXEC statements running programs, and DD statements
-// binding a program's file names to datasets or to the job's output.
+// Package jcl parses job network files in a small subset of IBM JCL: a JOB
+// statement, EXEC statements running programs, and DD statements binding a
+// program's file names to datasets or to the job's output. Pangaea's runner
+// executes them, and Copal reads them to draw the job network.
 package jcl
 
 import (

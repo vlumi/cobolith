@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vlumi/copal/cobol"
-	"github.com/vlumi/copal/layout"
+	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/copal/bedrock/layout"
 )
 
 // Layout is one record's layout, with its fields by name.

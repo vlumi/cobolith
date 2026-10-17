@@ -8,7 +8,7 @@ import (
 
 func acctMaster(t *testing.T) *Layout {
 	t.Helper()
-	l, err := FromCopybook("../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD")
+	l, err := FromCopybook("../../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestErrors(t *testing.T) {
 }
 
 func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
-	l, err := FromCopybook("../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD")
+	l, err := FromCopybook("../../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD")
 	if err != nil {
 		t.Fatal(err)
 	}

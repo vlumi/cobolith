@@ -126,7 +126,7 @@ type statementParser struct {
 // which tell PERFORM name from an inline PERFORM; conditions are its
 // condition names (level 88), which tell IF A = B OR C, where C is the
 // object of an abbreviated relation, from IF A = B OR C with C a condition
-// name. A verb outside the subset Copal knows is an error.
+// name. A verb outside the subset the parser knows is an error.
 func ParseStatements(body []Token, procedures, conditions map[string]bool) ([]Statement, error) {
 	p := &statementParser{tokens: body, procedures: procedures, conditions: conditions}
 	var all []Statement

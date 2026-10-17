@@ -1,5 +1,5 @@
 // Package record reads and writes the fields of fixed-length records by
-// name, using the record layouts Copal computes from the copybooks.
+// name, using the record layouts computed from the copybooks.
 //
 // Numbers are integers in units of the field's scale: 1,520.00 in a field
 // with two decimals is 152000. Signed display numbers carry their sign
@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vlumi/copal/cobol"
-	"github.com/vlumi/copal/layout"
+	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/copal/bedrock/layout"
 )
 
 // Layout is one record's layout, with its fields by name.

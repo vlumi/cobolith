@@ -239,3 +239,37 @@ func TestStatementErrors(t *testing.T) {
 		}
 	}
 }
+
+// A statement nested in a conditional phrase takes only the phrases of its
+// own kind: a NOT INVALID KEY after an ADD belongs to the READ around it.
+func TestNestedPhrases(t *testing.T) {
+	source := `           READ ACCT-IN
+               INVALID KEY
+                   ADD 1 TO WS-REJECTS
+               NOT INVALID KEY
+                   ADD 1 TO WS-FOUND
+                       ON SIZE ERROR MOVE 0 TO WS-FOUND
+           END-READ.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements, err := ParseStatements(tokens, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	describe(&b, statements, "")
+	want := `READ file ACCT-IN
+  INVALID KEY
+    ADD reads 1, WS-REJECTS writes WS-REJECTS
+  NOT INVALID KEY
+    ADD reads 1, WS-FOUND writes WS-FOUND
+      ON SIZE ERROR
+        MOVE reads 0 writes WS-FOUND
+`
+	if got := b.String(); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}

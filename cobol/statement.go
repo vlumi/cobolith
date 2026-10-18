@@ -237,7 +237,7 @@ func (p *statementParser) statement() (Statement, error) {
 	case "DELETE":
 		s.Files = []FileRef{{Name: p.next().Text}}
 		p.optional("RECORD")
-		err = p.conditionalPhrases(&s, "END-DELETE")
+		err = p.conditionalPhrases(&s, "END-DELETE", "INVALID KEY")
 	case "START":
 		err = p.start(&s)
 	case "CALL":
@@ -459,7 +459,7 @@ func (p *statementParser) arithmetic(s *Statement) error {
 		}
 		s.Writes = append(s.Writes, remainder...)
 	}
-	return p.conditionalPhrases(s, "END-"+s.Verb)
+	return p.conditionalPhrases(s, "END-"+s.Verb, "ON SIZE ERROR")
 }
 
 func (p *statementParser) compute(s *Statement) error {
@@ -475,7 +475,7 @@ func (p *statementParser) compute(s *Statement) error {
 		return err
 	}
 	s.Reads = []Operand{value}
-	return p.conditionalPhrases(s, "END-COMPUTE")
+	return p.conditionalPhrases(s, "END-COMPUTE", "ON SIZE ERROR")
 }
 
 // set parses SET x TO value, SET condition TO TRUE and SET index UP BY n.
@@ -533,7 +533,7 @@ func (p *statementParser) stringStatement(s *Statement) error {
 		s.Reads = append(s.Reads, pointer)
 		s.Writes = append(s.Writes, pointer)
 	}
-	return p.conditionalPhrases(s, "END-STRING")
+	return p.conditionalPhrases(s, "END-STRING", "ON OVERFLOW")
 }
 
 func (p *statementParser) display(s *Statement) error {
@@ -554,7 +554,7 @@ func (p *statementParser) display(s *Statement) error {
 	if err != nil || s.Verb != "ACCEPT" {
 		return err
 	}
-	return p.conditionalPhrases(s, "END-ACCEPT")
+	return p.conditionalPhrases(s, "END-ACCEPT", "ON EXCEPTION")
 }
 
 func (p *statementParser) ifStatement(s *Statement) error {
@@ -785,7 +785,7 @@ func (p *statementParser) search(s *Statement) error {
 		s.Writes = append(s.Writes, index)
 	}
 	p.head(s)
-	if err := p.conditionalPhrases(s, ""); err != nil {
+	if err := p.conditionalPhrases(s, "", "AT END"); err != nil {
 		return err
 	}
 	for p.optional("WHEN") {
@@ -838,7 +838,7 @@ func (p *statementParser) read(s *Statement) error {
 		}
 		s.Reads = append(s.Reads, key)
 	}
-	return p.conditionalPhrases(s, "END-"+s.Verb)
+	return p.conditionalPhrases(s, "END-"+s.Verb, "AT END", "INVALID KEY")
 }
 
 func (p *statementParser) write(s *Statement) error {
@@ -866,7 +866,7 @@ func (p *statementParser) write(s *Statement) error {
 	if s.Verb == "RELEASE" {
 		return nil
 	}
-	return p.conditionalPhrases(s, "END-"+s.Verb)
+	return p.conditionalPhrases(s, "END-"+s.Verb, "INVALID KEY")
 }
 
 // start parses START file [KEY IS relation key], which positions an
@@ -885,7 +885,7 @@ func (p *statementParser) start(s *Statement) error {
 		}
 		s.Reads = append(s.Reads, key)
 	}
-	return p.conditionalPhrases(s, "END-START")
+	return p.conditionalPhrases(s, "END-START", "INVALID KEY")
 }
 
 // call parses CALL program [USING [BY REFERENCE | BY CONTENT] items].
@@ -921,7 +921,7 @@ func (p *statementParser) call(s *Statement) error {
 			}
 		}
 	}
-	return p.conditionalPhrases(s, "END-CALL")
+	return p.conditionalPhrases(s, "END-CALL", "ON EXCEPTION", "ON OVERFLOW")
 }
 
 // sort parses SORT file ON ASCENDING KEY keys, then USING files or an
@@ -961,10 +961,12 @@ func (p *statementParser) sort(s *Statement) error {
 	return nil
 }
 
-// conditionalPhrases parses AT END, INVALID KEY, ON SIZE ERROR and ON
-// OVERFLOW, and their NOT forms, each as a branch, then the statement's
-// scope terminator if one is given and present.
-func (p *statementParser) conditionalPhrases(s *Statement, terminator string) error {
+// conditionalPhrases parses the conditional phrases the statement takes,
+// of AT END, INVALID KEY, ON SIZE ERROR, ON OVERFLOW and ON EXCEPTION, and
+// their NOT forms, each as a branch, then the statement's scope terminator
+// if one is given and present. A phrase the statement does not take ends
+// it: it belongs to the statement the statement is nested in.
+func (p *statementParser) conditionalPhrases(s *Statement, terminator string, phrases ...string) error {
 	p.head(s)
 	for {
 		start := p.i
@@ -993,7 +995,8 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string) er
 				}
 				kind = "ON SIZE ERROR"
 			}
-		default:
+		}
+		if kind == "" || !slices.Contains(phrases, kind) {
 			p.i = start
 			if terminator != "" {
 				p.optional(terminator)

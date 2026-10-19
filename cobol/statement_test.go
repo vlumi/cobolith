@@ -152,6 +152,7 @@ func TestIndexedAndCalls(t *testing.T) {
                ON EXCEPTION MOVE 'X' TO WS-STATUS
            END-CALL
            CALL WS-PROGRAM USING BY REFERENCE WS-REQUEST
+           CALL 'SLOT' USING WS-KIND RETURNING WS-SLOT
            ACCEPT WS-REQUEST
                ON EXCEPTION SET END-OF-INPUT TO TRUE
                NOT ON EXCEPTION DISPLAY WS-REQUEST
@@ -183,6 +184,7 @@ CALL calls AUTHPUR reads WS-REQUEST, WS-DATE writes WS-REQUEST
   ON EXCEPTION
     MOVE reads 'X' writes WS-STATUS
 CALL reads WS-PROGRAM, WS-REQUEST writes WS-REQUEST
+CALL calls SLOT reads WS-KIND writes WS-KIND, WS-SLOT
 ACCEPT writes WS-REQUEST
   ON EXCEPTION
     SET writes END-OF-INPUT
@@ -193,6 +195,12 @@ DISPLAY device SYSERR reads 'NO REQUEST'
 `
 	if got := b.String(); got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	if through := statements[5]; through.CallsThrough != "WS-PROGRAM" || len(through.Arguments()) != 1 || through.Arguments()[0].Name != "WS-REQUEST" {
+		t.Errorf("CALL WS-PROGRAM calls through %q passing %v, want WS-PROGRAM passing WS-REQUEST", through.CallsThrough, through.Arguments())
+	}
+	if slot := statements[6]; slot.Returning != "WS-SLOT" || len(slot.Arguments()) != 1 {
+		t.Errorf("CALL 'SLOT' returns into %q passing %v, want WS-SLOT passing WS-KIND", slot.Returning, slot.Arguments())
 	}
 }
 

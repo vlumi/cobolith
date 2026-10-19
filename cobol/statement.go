@@ -20,9 +20,14 @@ type Statement struct {
 	Writes     []Operand
 	Files      []FileRef
 	Procedures []ProcedureRef
-	// Calls is the program a CALL calls, when it is named by a literal;
-	// a CALL through a data item reads the item instead.
-	Calls string
+	// Calls is the program a CALL calls, when it is named by a literal,
+	// upper-cased as a program's name is a word whatever its case;
+	// CallsThrough the data item that names it otherwise, which the CALL
+	// reads first. Returning is the item a CALL's RETURNING phrase gives
+	// what the program called returns, which the CALL writes.
+	Calls        string
+	CallsThrough string
+	Returning    string
 	// Device is what an ACCEPT reads from or a DISPLAY writes to, as its
 	// FROM or UPON names it; empty for SYSIN and SYSOUT, the job's.
 	Device string
@@ -92,7 +97,7 @@ var terminators = map[string]bool{
 
 // keywords are reserved words that end an operand list.
 var keywords = map[string]bool{
-	"TO": true, "FROM": true, "BY": true, "INTO": true, "GIVING": true, "ROUNDED": true, "ALSO": true,
+	"TO": true, "FROM": true, "BY": true, "INTO": true, "GIVING": true, "RETURNING": true, "ROUNDED": true, "ALSO": true,
 	"WHEN": true, "ELSE": true, "THEN": true, "AT": true, "NOT": true, "END": true, "INVALID": true,
 	"ON": true, "SIZE": true, "OVERFLOW": true, "UNTIL": true, "VARYING": true, "TIMES": true,
 	"THRU": true, "THROUGH": true, "DEPENDING": true, "DELIMITED": true, "WITH": true, "POINTER": true,
@@ -285,6 +290,15 @@ func joinTokens(tokens []Token) string {
 		b.WriteString(t.String())
 	}
 	return b.String()
+}
+
+// Arguments are the items a CALL passes, in order, without the item it
+// calls through.
+func (s Statement) Arguments() []Operand {
+	if s.CallsThrough != "" {
+		return s.Reads[1:]
+	}
+	return s.Reads
 }
 
 // returning parses the RETURNING or GIVING phrase of STOP RUN or GOBACK,
@@ -919,8 +933,9 @@ func (p *statementParser) call(s *Statement) error {
 	}
 	if program.Name != "" {
 		s.Reads = append(s.Reads, program)
+		s.CallsThrough = program.Name
 	} else {
-		s.Calls = strings.Trim(program.Text, "'\"")
+		s.Calls = strings.ToUpper(strings.Trim(program.Text, "'\""))
 	}
 	if p.optional("USING") {
 		byContent := false
@@ -941,6 +956,14 @@ func (p *statementParser) call(s *Statement) error {
 				s.Writes = append(s.Writes, items...)
 			}
 		}
+	}
+	if p.optional("RETURNING", "GIVING") {
+		result, err := p.operand()
+		if err != nil {
+			return err
+		}
+		s.Writes = append(s.Writes, result)
+		s.Returning = result.Name
 	}
 	return p.conditionalPhrases(s, "END-CALL", "ON EXCEPTION", "ON OVERFLOW")
 }

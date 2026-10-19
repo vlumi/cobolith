@@ -184,6 +184,21 @@ second-step.
 	if !slices.Equal(p.Paragraphs[0].Comment, []string{"the run"}) {
 		t.Errorf("MAIN's comment %q, want the section header's", p.Paragraphs[0].Comment)
 	}
+	for _, c := range []struct {
+		ref         ProcedureRef
+		first, last int
+		ok          bool
+	}{
+		{ProcedureRef{Name: "WORK"}, 1, 2, true},
+		{ProcedureRef{Name: "FIRST-STEP"}, 1, 1, true},
+		{ProcedureRef{Name: "MAIN", Thru: "WORK"}, 0, 2, true},
+		{ProcedureRef{Name: "SECOND-STEP", Thru: "FIRST-STEP"}, 2, 1, false},
+		{ProcedureRef{Name: "NONE"}, 0, 0, false},
+	} {
+		if first, last, ok := p.Span(c.ref); ok != c.ok || ok && (first != c.first || last != c.last) {
+			t.Errorf("span of %+v: %d to %d, %v; want %d to %d, %v", c.ref, first, last, ok, c.first, c.last, c.ok)
+		}
+	}
 }
 
 func TestParseFileClauses(t *testing.T) {

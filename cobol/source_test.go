@@ -153,3 +153,29 @@ func TestLexCommentEntries(t *testing.T) {
 		t.Errorf("%s after the entries, want ENVIRONMENT", last)
 	}
 }
+
+// After >>SOURCE FORMAT IS FREE, a line has no columns: a word may start
+// anywhere, *> starts a comment, outside a literal, and words are upper
+// case whatever case they are written in.
+func TestFreeFormat(t *testing.T) {
+	source := `>>source format is free
+*> the request
+move "a *> b" to ws-text *> not code
+    display ws-text.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, tok := range tokens {
+		got = append(got, fmt.Sprintf("%d:%d %s", tok.Pos.Line, tok.Pos.Col, tok.Text))
+	}
+	want := []string{"3:1 MOVE", "3:6 a *> b", "3:15 TO", "3:18 WS-TEXT", "4:5 DISPLAY", "4:13 WS-TEXT", "4:20 ."}
+	if !slices.Equal(got, want) {
+		t.Errorf("tokens %q, want %q", got, want)
+	}
+	if !slices.Equal(tokens[0].Comment, []string{"the request"}) {
+		t.Errorf("comment %q", tokens[0].Comment)
+	}
+}

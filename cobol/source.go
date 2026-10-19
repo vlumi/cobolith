@@ -1,5 +1,6 @@
-// Package cobol reads fixed-format COBOL source: it splits the lines into
-// tokens that keep their position in the original file, expands COPY
+// Package cobol reads COBOL source, in fixed format or, after a
+// >>SOURCE FORMAT IS FREE directive, in free format: it splits the lines
+// into tokens that keep their position in the original file, expands COPY
 // statements, and parses a program's divisions.
 package cobol
 
@@ -101,7 +102,10 @@ func Lex(file string, source []byte) ([]Token, error) {
 }
 
 type lexer struct {
-	file   string
+	file string
+	// free is set by a >>SOURCE FORMAT IS FREE directive: lines have no
+	// sequence area, indicator or right margin, and *> starts a comment.
+	free   bool
 	tokens []Token
 	open   *Token // a literal still open at the end of the previous line
 	quote  byte
@@ -113,6 +117,14 @@ type lexer struct {
 }
 
 func (l *lexer) line(lineNo int, text string) error {
+	if format, ok := sourceFormat(text); ok {
+		l.free = format == "FREE"
+		return nil
+	}
+	if l.free {
+		l.freeLine(lineNo, text)
+		return nil
+	}
 	if strings.TrimSpace(text[min(len(text), indicatorColumn-1):min(len(text), lastColumn)]) == "" {
 		l.comment = nil
 		return nil
@@ -144,6 +156,53 @@ func (l *lexer) line(lineNo int, text string) error {
 	}
 	l.scan(pos, body, 0)
 	return nil
+}
+
+// sourceFormat reads a >>SOURCE FORMAT directive, wherever on its line it
+// is: the format it sets, FREE or FIXED.
+func sourceFormat(text string) (string, bool) {
+	fields := strings.Fields(strings.ToUpper(text))
+	if len(fields) < 2 || fields[0] != ">>SOURCE" {
+		return "", false
+	}
+	format := fields[len(fields)-1]
+	return format, format == "FREE" || format == "FIXED"
+}
+
+// freeLine lexes a line of free-format source: a line that starts with *>
+// is a comment, and *> outside a literal ends the line's code.
+func (l *lexer) freeLine(lineNo int, text string) {
+	trimmed := strings.TrimSpace(text)
+	switch {
+	case trimmed == "":
+		l.comment = nil
+		return
+	case strings.HasPrefix(trimmed, "*>"):
+		l.comment = append(l.comment, strings.TrimSpace(strings.TrimPrefix(trimmed, "*>")))
+		return
+	}
+	body := []byte(text)
+	if end := inlineComment(body); end >= 0 {
+		body = body[:end]
+	}
+	l.scan(Pos{File: l.file, Line: lineNo}, body, 0)
+}
+
+// inlineComment finds where a *> comment starts on a line, outside the
+// literals on it, or -1.
+func inlineComment(body []byte) int {
+	var quote byte
+	for i := 0; i < len(body); i++ {
+		switch c := body[i]; {
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote == 0 && (c == '\'' || c == '"'):
+			quote = c
+		case quote == 0 && c == '*' && i+1 < len(body) && body[i+1] == '>':
+			return i
+		}
+	}
+	return -1
 }
 
 // addToCommentEntry adds a line's text to the open comment entry.
@@ -203,7 +262,7 @@ func (l *lexer) scan(pos Pos, body []byte, i int) {
 	}
 	for i < len(body) {
 		c := body[i]
-		pos.Col = indicatorColumn + 1 + i
+		pos.Col = l.column(i)
 		switch {
 		case c == ' ':
 			i++
@@ -233,6 +292,14 @@ func (l *lexer) scan(pos Pos, body []byte, i int) {
 			i = end
 		}
 	}
+}
+
+// column is the column, 1-based, of a byte of a line's code.
+func (l *lexer) column(i int) int {
+	if l.free {
+		return i + 1
+	}
+	return indicatorColumn + 1 + i
 }
 
 // literal reads an open literal from body[i:], up to its closing quote or,

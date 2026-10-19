@@ -54,3 +54,13 @@ func TestReadErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestReadCopiesByLiteralName(t *testing.T) {
+	tokens, err := Read("testdata/copy/LITERAL.cbl", []string{"testdata/copy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := texts(tokens); !slices.Contains(got, "FROM-INNER") {
+		t.Errorf("got %q, want INNER.cpy copied", got)
+	}
+}

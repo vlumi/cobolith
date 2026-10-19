@@ -37,16 +37,22 @@ type FileControl struct {
 	Organization string
 	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
 	RecordKey    string // an indexed file's key
+	RelativeKey  string // the item that holds a relative file's record number
 	Status       string
 	Pos          Pos
 }
 
-// FileDescription is an FD or SD entry with the records under it.
+// FileDescription is an FD or SD entry with the records under it, and the
+// record lengths its RECORD clause gives, if it has one: the same for
+// fixed-length records, and for variable-length ones the shortest, the
+// longest, and the item that holds a record's length.
 type FileDescription struct {
-	Kind    string // FD or SD
-	Name    string
-	Entries []*DataEntry
-	Pos     Pos
+	Kind                 string // FD or SD
+	Name                 string
+	MinLength, MaxLength int
+	LengthIn             string
+	Entries              []*DataEntry
+	Pos                  Pos
 }
 
 // Paragraph is a paragraph of the procedure division: the tokens of its
@@ -214,6 +220,10 @@ func parseSelect(entry []Token) (FileControl, error) {
 			c.optional("KEY")
 			c.optional("IS")
 			file.RecordKey = c.next().Text
+		case clause.Is("RELATIVE"):
+			c.optional("KEY")
+			c.optional("IS")
+			file.RelativeKey = c.next().Text
 		case clause.Is("FILE"):
 			if err := c.expect("STATUS"); err != nil {
 				return FileControl{}, err
@@ -240,9 +250,11 @@ func (p *Program) parseData(tokens []Token) error {
 			if section != "FILE" {
 				return fmt.Errorf("%s: %s outside the FILE SECTION", entry[0].Pos, entry[0])
 			}
-			p.FileSection = append(p.FileSection, FileDescription{
-				Kind: entry[0].Text, Name: entry[1].Text, Pos: entry[0].Pos,
-			})
+			fd, err := parseFileDescription(entry)
+			if err != nil {
+				return err
+			}
+			p.FileSection = append(p.FileSection, fd)
 		default:
 			if err := p.addDataEntry(section, entry); err != nil {
 				return err
@@ -250,6 +262,40 @@ func (p *Program) parseData(tokens []Token) error {
 		}
 	}
 	return nil
+}
+
+// parseFileDescription parses FD or SD name and its RECORD clause:
+// RECORD [CONTAINS] n [CHARACTERS], RECORD [CONTAINS] n TO m [CHARACTERS],
+// or RECORD [IS] VARYING [IN] [SIZE] [FROM] n TO m [CHARACTERS] DEPENDING
+// [ON] item.
+func parseFileDescription(entry []Token) (FileDescription, error) {
+	fd := FileDescription{Kind: entry[0].Text, Name: entry[1].Text, Pos: entry[0].Pos}
+	c := &cursor{tokens: entry[2:]}
+	for !c.done() {
+		clause := c.next()
+		if !clause.Is("RECORD") {
+			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
+		}
+		for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
+			c.optional(word)
+		}
+		var err error
+		if fd.MinLength, err = c.number(); err != nil {
+			return FileDescription{}, err
+		}
+		fd.MaxLength = fd.MinLength
+		if c.optional("TO") {
+			if fd.MaxLength, err = c.number(); err != nil {
+				return FileDescription{}, err
+			}
+		}
+		c.optional("CHARACTERS")
+		if c.optional("DEPENDING") {
+			c.optional("ON")
+			fd.LengthIn = c.next().Text
+		}
+	}
+	return fd, nil
 }
 
 func (p *Program) addDataEntry(section string, tokens []Token) error {

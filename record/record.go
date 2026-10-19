@@ -11,6 +11,7 @@ package record
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/vlumi/copal/bedrock/cobol"
@@ -147,7 +148,7 @@ func (l *Layout) Number(r []byte, name string) (int64, error) {
 	if f.Usage == "COMP-3" {
 		return unpack(name, b)
 	}
-	return unzone(name, b, f.Signed)
+	return unzone(name, b, f)
 }
 
 // SetNumber writes a value, in units of the field's scale, into a numeric
@@ -167,7 +168,7 @@ func (l *Layout) SetNumber(r []byte, name string, value int64) error {
 	if f.Usage == "COMP-3" {
 		pack(b, digits, f.Signed, value < 0)
 	} else {
-		zone(b, digits, f.Signed, value < 0)
+		zone(b, digits, f, value < 0)
 	}
 	return nil
 }
@@ -184,13 +185,32 @@ func (l *Layout) numeric(r []byte, name string) (*layout.Field, []byte, error) {
 	return f, b, err
 }
 
-// unzone reads a display number, its sign overpunched if it has one.
-func unzone(name string, b []byte, signed bool) (int64, error) {
+// unzone reads a display number, with its sign if it has one: in a byte
+// of its own, or overpunched on its first or last digit, as its SIGN
+// clause says.
+func unzone(name string, b []byte, f *layout.Field) (int64, error) {
+	sign, punched := int64(1), -1
+	switch {
+	case !f.Signed:
+	case f.SignSeparate:
+		at := separateSign(f, b)
+		switch b[at] {
+		case '-':
+			sign = -1
+		case '+':
+		default:
+			return 0, fmt.Errorf("%s: %q has no sign", name, b)
+		}
+		b = append(slices.Clone(b[:at]), b[at+1:]...)
+	case f.Sign == "LEADING":
+		punched = 0
+	default:
+		punched = len(b) - 1
+	}
 	var n int64
-	sign := int64(1)
 	for i, c := range b {
 		digit := strings.IndexByte("0123456789", c)
-		if i == len(b)-1 && signed {
+		if i == punched {
 			if d := strings.IndexByte(positive, c); d >= 0 {
 				digit = d
 			} else if d := strings.IndexByte(negative, c); d >= 0 {
@@ -205,17 +225,43 @@ func unzone(name string, b []byte, signed bool) (int64, error) {
 	return sign * n, nil
 }
 
-// zone writes digits as a display number, overpunching the sign.
-func zone(b []byte, digits string, signed, negativeValue bool) {
-	copy(b, digits)
-	if signed {
-		last := digits[len(digits)-1] - '0'
+// zone writes digits as a display number, with its sign where its SIGN
+// clause says, overpunched on the last digit if it has none.
+func zone(b []byte, digits string, f *layout.Field, negativeValue bool) {
+	switch {
+	case !f.Signed:
+		copy(b, digits)
+	case f.SignSeparate:
+		at := separateSign(f, b)
+		b[at] = '+'
 		if negativeValue {
-			b[len(b)-1] = negative[last]
-		} else {
-			b[len(b)-1] = positive[last]
+			b[at] = '-'
 		}
+		if at == 0 {
+			copy(b[1:], digits)
+		} else {
+			copy(b, digits)
+		}
+	default:
+		copy(b, digits)
+		at := len(b) - 1
+		if f.Sign == "LEADING" {
+			at = 0
+		}
+		punch := positive
+		if negativeValue {
+			punch = negative
+		}
+		b[at] = punch[digits[at]-'0']
 	}
+}
+
+// separateSign is the index of a number's separate sign byte.
+func separateSign(f *layout.Field, b []byte) int {
+	if f.Sign == "LEADING" {
+		return 0
+	}
+	return len(b) - 1
 }
 
 // unpack reads a packed decimal number.

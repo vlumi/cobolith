@@ -131,3 +131,26 @@ func TestPackedDecimal(t *testing.T) {
 		t.Error("read a digit above nine")
 	}
 }
+
+func TestSigns(t *testing.T) {
+	l, err := FromCopybook("testdata/SIGNS.cpy", nil, "SIGNS-RECORD", cobol.MicroFocus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := l.Blank()
+	for _, name := range []string{"SG-LEADING-SEPARATE", "SG-TRAILING-SEPARATE", "SG-LEADING", "SG-TRAILING"} {
+		if err := l.SetNumber(r, name, -125); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := l.Number(r, name); err != nil || n != -125 {
+			t.Errorf("%s: %d, %v, want -125", name, n, err)
+		}
+	}
+	if got, want := string(r), "-125125-J2512N"; got != want {
+		t.Errorf("record %q, want %q", got, want)
+	}
+	r[0] = ' '
+	if _, err := l.Number(r, "SG-LEADING-SEPARATE"); err == nil {
+		t.Error("read a separate sign that is neither + nor -")
+	}
+}

@@ -117,14 +117,14 @@ func storageSize(p picture, usage string, dialect cobol.Dialect) (int, error) {
 			return 0, fmt.Errorf("COMP-3 needs a numeric picture")
 		}
 		return p.digits/2 + 1, nil
-	case "COMP":
+	case "COMP", "COMP-5":
 		if p.category != Numeric {
-			return 0, fmt.Errorf("COMP needs a numeric picture")
+			return 0, fmt.Errorf("%s needs a numeric picture", usage)
 		}
 		if size, ok := dialect.BinarySize(p.digits); ok {
 			return size, nil
 		}
-		return 0, fmt.Errorf("COMP with %d digits", p.digits)
+		return 0, fmt.Errorf("%s with %d digits", usage, p.digits)
 	}
 	return 0, fmt.Errorf("usage %s is not supported", usage)
 }

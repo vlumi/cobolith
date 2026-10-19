@@ -13,7 +13,9 @@ import (
 var CopybookExtensions = []string{".cpy", ".CPY", ".cbl"}
 
 // Read lexes a source file and expands its COPY statements with the tokens
-// of the copybooks, found by name in the copybook directories. Expanded
+// of the copybooks, found by name in the copybook directories: a name
+// quoted as a literal is the file's name as written, and a word is tried
+// with each of the extensions. Expanded
 // tokens keep the positions they have in their copybook.
 //
 // COPY ... REPLACING replaces text in the copied tokens: pseudo-text
@@ -71,7 +73,7 @@ type replacement struct {
 // index of the closing period.
 func parseCopy(tokens []Token, i int) (string, []replacement, int, error) {
 	pos := tokens[i].Pos
-	if i+1 >= len(tokens) || tokens[i+1].Kind != Word {
+	if i+1 >= len(tokens) || tokens[i+1].Kind != Word && tokens[i+1].Kind != String {
 		return "", nil, 0, fmt.Errorf("%s: COPY without a copybook name", pos)
 	}
 	name := tokens[i+1].Text
@@ -193,7 +195,7 @@ func isTag(word string) bool {
 
 func findCopybook(name string, dirs []string) (string, error) {
 	for _, dir := range dirs {
-		for _, ext := range CopybookExtensions {
+		for _, ext := range append([]string{""}, CopybookExtensions...) {
 			path := filepath.Join(dir, name+ext)
 			if _, err := os.Stat(path); err == nil {
 				return path, nil

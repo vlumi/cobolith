@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/vlumi/copal/bedrock/cobol"
 )
 
 // Categories of elementary items, by their picture.
@@ -105,8 +107,8 @@ func expandPicture(s string) (string, error) {
 }
 
 // storageSize is the number of bytes an elementary item takes with the
-// given usage.
-func storageSize(p picture, usage string) (int, error) {
+// given usage, in the dialect.
+func storageSize(p picture, usage string, dialect cobol.Dialect) (int, error) {
 	switch usage {
 	case "DISPLAY":
 		return p.positions, nil
@@ -115,19 +117,14 @@ func storageSize(p picture, usage string) (int, error) {
 			return 0, fmt.Errorf("COMP-3 needs a numeric picture")
 		}
 		return p.digits/2 + 1, nil
-	case "COMP":
+	case "COMP", "COMP-5":
 		if p.category != Numeric {
-			return 0, fmt.Errorf("COMP needs a numeric picture")
+			return 0, fmt.Errorf("%s needs a numeric picture", usage)
 		}
-		switch {
-		case p.digits <= 4:
-			return 2, nil
-		case p.digits <= 9:
-			return 4, nil
-		case p.digits <= 18:
-			return 8, nil
+		if size, ok := dialect.BinarySize(p.digits); ok {
+			return size, nil
 		}
-		return 0, fmt.Errorf("COMP with %d digits", p.digits)
+		return 0, fmt.Errorf("%s with %d digits", usage, p.digits)
 	}
 	return 0, fmt.Errorf("usage %s is not supported", usage)
 }

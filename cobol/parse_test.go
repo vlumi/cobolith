@@ -135,8 +135,9 @@ func TestReadDataEntries(t *testing.T) {
 func TestParseErrors(t *testing.T) {
 	head := "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. BROKEN.\n"
 	for name, source := range map[string]string{
-		"FD without a name": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
-		"a paragraph twice": head + "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"FD without a name":     head + "       DATA DIVISION.\n       FILE SECTION.\n       FD.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"a paragraph twice":     head + "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"an FD clause not read": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD  IN-FILE BLOCK CONTAINS 0 RECORDS.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
 	} {
 		tokens, err := Lex("test", []byte(source))
 		if err != nil {
@@ -182,5 +183,53 @@ second-step.
 	}
 	if !slices.Equal(p.Paragraphs[0].Comment, []string{"the run"}) {
 		t.Errorf("MAIN's comment %q, want the section header's", p.Paragraphs[0].Comment)
+	}
+}
+
+func TestParseFileClauses(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. files.
+environment division.
+input-output section.
+file-control.
+    select slots assign to "SLOTS"
+        organization is relative
+        access mode is random
+        relative key is ws-slot.
+    select lines-in assign to "LINES"
+        organization is line sequential.
+data division.
+file section.
+fd  slots record contains 9 characters.
+01  slot-record                  pic x(9).
+fd  lines-in
+    record varying in size from 14 to 61 characters depending on ws-length.
+01  short-line                   pic x(14).
+01  long-line                    pic x(61).
+working-storage section.
+01  ws-slot                      pic 9(4) comp-5.
+01  ws-length                    pic 9(4) comp-5.
+procedure division.
+main section.
+    goback.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := p.Files[0]; f.Organization != "RELATIVE" || f.RelativeKey != "WS-SLOT" || f.RecordKey != "" {
+		t.Errorf("SLOTS %+v, want a relative file with its record number in WS-SLOT", f)
+	}
+	var got []string
+	for _, fd := range p.FileSection {
+		got = append(got, fmt.Sprintf("%s %d %d %s %d", fd.Name, fd.MinLength, fd.MaxLength, fd.LengthIn, len(fd.Entries)))
+	}
+	if want := []string{"SLOTS 9 9  1", "LINES-IN 14 61 WS-LENGTH 2"}; !slices.Equal(got, want) {
+		t.Errorf("file descriptions %q, want %q", got, want)
 	}
 }

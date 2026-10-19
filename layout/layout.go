@@ -20,10 +20,15 @@ type Field struct {
 	Category string
 	// Digits, Scale and Signed describe numeric items: how many digits,
 	// how many of them after the implied decimal point, and whether signed.
-	Digits    int
-	Scale     int
-	Signed    bool
-	Redefines string
+	Digits int
+	Scale  int
+	Signed bool
+	// Sign is where a signed display number's sign is, LEADING or
+	// TRAILING, and SignSeparate whether in a byte of its own, as its
+	// SIGN clause says; without one, it is overpunched on the last digit.
+	Sign         string
+	SignSeparate bool
+	Redefines    string
 	// Occurs is the number of occurrences, the maximum when it depends on
 	// another field; 0 for a field that does not repeat.
 	Occurs      int
@@ -50,14 +55,16 @@ func (f *Field) Size() int {
 }
 
 // Records builds the records described by the entries, in order: one for
-// each level-01 and level-77 entry, with the entries below it as fields.
-func Records(entries []*cobol.DataEntry) ([]*Field, error) {
+// each level-01 and level-77 entry, with the entries below it as fields,
+// laid out as the dialect lays them out. A level-78 entry is a constant,
+// which takes no storage.
+func Records(entries []*cobol.DataEntry, dialect cobol.Dialect) ([]*Field, error) {
 	records, err := buildTree(entries)
 	if err != nil {
 		return nil, err
 	}
 	for _, record := range records {
-		if err := place(record, 1, "DISPLAY"); err != nil {
+		if err := place(record, 1, "DISPLAY", dialect); err != nil {
 			return nil, err
 		}
 	}
@@ -75,6 +82,7 @@ func buildTree(entries []*cobol.DataEntry) ([]*Field, error) {
 			}
 			f := open[len(open)-1]
 			f.Conditions = append(f.Conditions, Condition{Name: e.Name, Values: e.Values, Pos: e.Pos})
+		case e.Level == 78:
 		case e.Level == 1 || e.Level == 77:
 			f := newField(e)
 			records = append(records, f)
@@ -99,33 +107,38 @@ func buildTree(entries []*cobol.DataEntry) ([]*Field, error) {
 
 func newField(e *cobol.DataEntry) *Field {
 	return &Field{
-		Level:       e.Level,
-		Name:        e.Name,
-		Picture:     e.Picture,
-		Usage:       e.Usage,
-		Redefines:   e.Redefines,
-		Occurs:      e.Occurs,
-		OccursMin:   e.OccursMin,
-		DependingOn: e.DependingOn,
-		IndexedBy:   e.IndexedBy,
-		Values:      e.Values,
-		Comment:     e.Comment,
-		Pos:         e.Pos,
+		Level:        e.Level,
+		Name:         e.Name,
+		Picture:      e.Picture,
+		Usage:        e.Usage,
+		Sign:         e.Sign,
+		SignSeparate: e.SignSeparate,
+		Redefines:    e.Redefines,
+		Occurs:       e.Occurs,
+		OccursMin:    e.OccursMin,
+		DependingOn:  e.DependingOn,
+		IndexedBy:    e.IndexedBy,
+		Values:       e.Values,
+		Comment:      e.Comment,
+		Pos:          e.Pos,
 	}
 }
 
 // place sets the position and length of f, starting at start, and of
 // everything under it. A field without a usage takes its group's.
-func place(f *Field, start int, usage string) error {
+func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
 	f.Start = start
 	if f.Usage == "" {
 		f.Usage = usage
 	}
 	if len(f.Children) == 0 {
-		return f.placeElementary()
+		return f.placeElementary(dialect)
 	}
 	if f.Picture != "" {
 		return fmt.Errorf("%s: group %s has a picture", f.Pos, f.Name)
+	}
+	if f.Sign != "" {
+		return fmt.Errorf("%s: group %s: SIGN on a group is not supported yet", f.Pos, f.Name)
 	}
 	f.Category = Group
 	next, end := start, start
@@ -138,7 +151,7 @@ func place(f *Field, start int, usage string) error {
 			}
 			childStart = target.Start
 		}
-		if err := place(child, childStart, f.Usage); err != nil {
+		if err := place(child, childStart, f.Usage, dialect); err != nil {
 			return err
 		}
 		if child.Redefines == "" {
@@ -150,7 +163,7 @@ func place(f *Field, start int, usage string) error {
 	return nil
 }
 
-func (f *Field) placeElementary() error {
+func (f *Field) placeElementary(dialect cobol.Dialect) error {
 	if f.Picture == "" {
 		return fmt.Errorf("%s: elementary %s has no picture", f.Pos, f.Name)
 	}
@@ -158,13 +171,21 @@ func (f *Field) placeElementary() error {
 	if err != nil {
 		return fmt.Errorf("%s: %s: %w", f.Pos, f.Name, err)
 	}
-	f.Length, err = storageSize(p, f.Usage)
+	f.Length, err = storageSize(p, f.Usage, dialect)
 	if err != nil {
 		return fmt.Errorf("%s: %s: %w", f.Pos, f.Name, err)
 	}
 	f.Category = p.category
 	if p.category == Numeric {
 		f.Digits, f.Scale, f.Signed = p.digits, p.scale, p.signed
+	}
+	if f.Sign != "" {
+		if !f.Signed || f.Usage != "DISPLAY" {
+			return fmt.Errorf("%s: %s: SIGN on an item that is not a signed display number", f.Pos, f.Name)
+		}
+		if f.SignSeparate {
+			f.Length++
+		}
 	}
 	return nil
 }

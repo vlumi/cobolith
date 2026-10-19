@@ -9,18 +9,23 @@ import (
 // the clauses that shape the item. Building the hierarchy and computing
 // offsets is the layout's work.
 type DataEntry struct {
-	Level       int
-	Name        string // FILLER when the entry has no name
-	Picture     string
-	Usage       string // DISPLAY, COMP or COMP-3
-	Redefines   string
-	Occurs      int // 0 when the item does not repeat; the maximum for DEPENDING ON
-	OccursMin   int
-	DependingOn string
-	IndexedBy   []string // the index names of an OCCURS table
-	Values      []string // VALUE literals; for level 88, ranges as "A THRU B"
-	Comment     []string // the comment lines before the entry
-	Pos         Pos
+	Level   int
+	Name    string // FILLER when the entry has no name
+	Picture string
+	Usage   string // DISPLAY, COMP, COMP-3 or COMP-5
+	// Sign is where a signed display number's sign is, LEADING or
+	// TRAILING, if a SIGN clause says; SignSeparate when it takes a byte
+	// of its own rather than being overpunched on a digit.
+	Sign         string
+	SignSeparate bool
+	Redefines    string
+	Occurs       int // 0 when the item does not repeat; the maximum for DEPENDING ON
+	OccursMin    int
+	DependingOn  string
+	IndexedBy    []string // the index names of an OCCURS table
+	Values       []string // VALUE literals; for level 88, ranges as "A THRU B"
+	Comment      []string // the comment lines before the entry
+	Pos          Pos
 }
 
 // usages maps the spellings of each supported usage to one name.
@@ -34,6 +39,8 @@ var usages = map[string]string{
 	"COMP-3":          "COMP-3",
 	"COMPUTATIONAL-3": "COMP-3",
 	"PACKED-DECIMAL":  "COMP-3",
+	"COMP-5":          "COMP-5",
+	"COMPUTATIONAL-5": "COMP-5",
 }
 
 // ParseDataEntry parses the tokens of one data description entry, without
@@ -58,7 +65,7 @@ func ParseDataEntry(tokens []Token) (*DataEntry, error) {
 
 func isClause(word string) bool {
 	switch word {
-	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES":
+	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES", "SIGN", "LEADING", "TRAILING":
 		return true
 	}
 	_, isUsage := usages[word]
@@ -76,6 +83,11 @@ func (e *DataEntry) parseClause(c *cursor) error {
 		return e.setUsage(c.next())
 	case usages[clause.Text] != "":
 		return e.setUsage(clause)
+	case clause.Is("SIGN"):
+		c.optional("IS")
+		return e.parseSign(c, c.next())
+	case clause.Is("LEADING") || clause.Is("TRAILING"):
+		return e.parseSign(c, clause)
 	case clause.Is("REDEFINES"):
 		e.Redefines = c.next().Text
 	case clause.Is("OCCURS"):
@@ -124,6 +136,20 @@ func (e *DataEntry) parseOccurs(c *cursor) error {
 		if len(e.IndexedBy) == 0 {
 			return fmt.Errorf("%s: %s: INDEXED BY without an index name", e.Pos, e.Name)
 		}
+	}
+	return nil
+}
+
+// parseSign parses the rest of [SIGN [IS]] LEADING|TRAILING [SEPARATE
+// [CHARACTER]], from the position.
+func (e *DataEntry) parseSign(c *cursor, position Token) error {
+	if !position.Is("LEADING") && !position.Is("TRAILING") {
+		return fmt.Errorf("%s: %s: SIGN %s, want LEADING or TRAILING", position.Pos, e.Name, position)
+	}
+	e.Sign = position.Text
+	if c.optional("SEPARATE") {
+		e.SignSeparate = true
+		c.optional("CHARACTER")
 	}
 	return nil
 }

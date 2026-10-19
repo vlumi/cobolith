@@ -30,20 +30,20 @@ type FileRecords struct {
 	Records []*Field
 }
 
-// Program lays out a program's records.
-func Program(p *cobol.Program) (*ProgramRecords, error) {
+// Program lays out a program's records, written in the dialect.
+func Program(p *cobol.Program, dialect cobol.Dialect) (*ProgramRecords, error) {
 	r := &ProgramRecords{}
 	for _, fd := range p.FileSection {
-		records, err := Records(fd.Entries)
+		records, err := Records(fd.Entries, dialect)
 		if err != nil {
 			return nil, err
 		}
 		r.Files = append(r.Files, FileRecords{File: fd.Name, Records: records})
 	}
 	var err error
-	if r.WorkingStorage, err = Records(p.WorkingStorage); err != nil {
+	if r.WorkingStorage, err = Records(p.WorkingStorage, dialect); err != nil {
 		return nil, err
 	}
-	r.Linkage, err = Records(p.Linkage)
+	r.Linkage, err = Records(p.Linkage, dialect)
 	return r, err
 }

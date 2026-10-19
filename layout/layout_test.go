@@ -56,7 +56,7 @@ func TestRecords(t *testing.T) {
            05  WS-B                    PIC 9(2).
        77  WS-I                        PIC 99.
 `
-	records, err := Records(entries(t, source))
+	records, err := Records(entries(t, source), cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestRecordsOccursDependingOn(t *testing.T) {
            05  WS-ITEM                 PIC X(10)
                    OCCURS 0 TO 20 TIMES DEPENDING ON WS-COUNT.
 `
-	records, err := Records(entries(t, source))
+	records, err := Records(entries(t, source), cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,9 +117,35 @@ func TestRecordsErrors(t *testing.T) {
 	}
 	for name, source := range tests {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Records(entries(t, source)); err == nil {
+			if _, err := Records(entries(t, source), cobol.IBM); err == nil {
 				t.Error("built without error")
 			}
 		})
+	}
+}
+
+func TestMicroFocusClauses(t *testing.T) {
+	source := `>>source format is free
+78  floor                        value 25.00.
+01  account.
+    05  balance                  pic s9(7)v99 sign leading separate.
+    05  overpunched              pic s9(3) sign is trailing.
+    05  slot                     pic 9(4) comp-5.
+    05  flag                     pic 9 comp-5.
+`
+	records, err := Records(entries(t, source), cobol.MicroFocus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("%d records, want 1: a constant is no record", len(records))
+	}
+	var got []string
+	for _, f := range records[0].Children {
+		got = append(got, fmt.Sprintf("%s %d %d %s %v", f.Name, f.Start, f.Length, f.Sign, f.SignSeparate))
+	}
+	want := "BALANCE 1 10 LEADING true; OVERPUNCHED 11 3 TRAILING false; SLOT 14 2  false; FLAG 16 1  false"
+	if strings.Join(got, "; ") != want {
+		t.Errorf("got  %s\nwant %s", strings.Join(got, "; "), want)
 	}
 }

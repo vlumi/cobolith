@@ -312,3 +312,36 @@ GOBACK reads WS-RESULT writes RETURN-CODE
 		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
 	}
 }
+
+func TestTestAfter(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. loops.
+procedure division.
+main.
+    perform with test after until ws-a = 1
+        add 1 to ws-a
+    end-perform
+    perform with test before until ws-a = 2
+        add 1 to ws-a
+    end-perform
+    perform other-para until ws-a = 3.
+other-para.
+    exit.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []bool
+	for _, s := range p.Paragraphs[0].Statements {
+		got = append(got, s.TestAfter)
+	}
+	if want := []bool{true, false, false}; !slices.Equal(got, want) {
+		t.Errorf("tests after: got %v, want %v", got, want)
+	}
+}

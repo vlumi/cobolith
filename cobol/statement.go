@@ -31,8 +31,11 @@ type Statement struct {
 	// Device is what an ACCEPT reads from or a DISPLAY writes to, as its
 	// FROM or UPON names it; empty for SYSIN and SYSOUT, the job's.
 	Device string
-	// Condition is what an IF tests, or the UNTIL of a PERFORM.
+	// Condition is what an IF tests, or the UNTIL of a PERFORM, and
+	// TestAfter whether the PERFORM tests it after each pass, WITH TEST
+	// AFTER, rather than before.
 	Condition *Condition
+	TestAfter bool
 	Branches  []Branch
 }
 
@@ -744,7 +747,8 @@ func (p *statementParser) performPhrase(s *Statement) error {
 		if err := p.expect("TEST"); err != nil {
 			return err
 		}
-		p.optional("BEFORE", "AFTER")
+		s.TestAfter = p.optional("AFTER")
+		p.optional("BEFORE")
 	}
 	switch t := p.peek(); {
 	case p.at(p.i+1).Is("TIMES") && !t.Is("UNTIL") && !t.Is("VARYING"):

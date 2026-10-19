@@ -1,6 +1,10 @@
 package layout
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/vlumi/copal/bedrock/cobol"
+)
 
 func TestParsePicture(t *testing.T) {
 	tests := []struct {
@@ -36,25 +40,28 @@ func TestParsePictureErrors(t *testing.T) {
 func TestStorageSize(t *testing.T) {
 	tests := []struct {
 		pic, usage string
+		dialect    cobol.Dialect
 		want       int
 	}{
-		{"S9(11)V99", "DISPLAY", 13},
-		{"S9(11)V99", "COMP-3", 7},
-		{"S9(7)V99", "COMP-3", 5},
-		{"S9(4)", "COMP", 2},
-		{"9(9)", "COMP", 4},
-		{"S9(18)", "COMP", 8},
+		{"S9(11)V99", "DISPLAY", cobol.IBM, 13},
+		{"S9(11)V99", "COMP-3", cobol.IBM, 7},
+		{"S9(7)V99", "COMP-3", cobol.IBM, 5},
+		{"S9(4)", "COMP", cobol.IBM, 2},
+		{"9(9)", "COMP", cobol.IBM, 4},
+		{"S9(18)", "COMP", cobol.IBM, 8},
+		{"9", "COMP", cobol.MicroFocus, 1},
+		{"9(6)", "COMP", cobol.MicroFocus, 3},
 	}
 	for _, test := range tests {
 		p, err := parsePicture(test.pic)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got, err := storageSize(p, test.usage); err != nil || got != test.want {
-			t.Errorf("PIC %s %s: %d, %v, want %d", test.pic, test.usage, got, err, test.want)
+		if got, err := storageSize(p, test.usage, test.dialect); err != nil || got != test.want {
+			t.Errorf("PIC %s %s in %s: %d, %v, want %d", test.pic, test.usage, test.dialect.Name, got, err, test.want)
 		}
 	}
-	if _, err := storageSize(picture{positions: 3, category: Alphanumeric}, "COMP-3"); err == nil {
+	if _, err := storageSize(picture{positions: 3, category: Alphanumeric}, "COMP-3", cobol.IBM); err == nil {
 		t.Error("COMP-3 accepted an alphanumeric picture")
 	}
 }

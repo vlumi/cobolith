@@ -50,14 +50,15 @@ func (f *Field) Size() int {
 }
 
 // Records builds the records described by the entries, in order: one for
-// each level-01 and level-77 entry, with the entries below it as fields.
-func Records(entries []*cobol.DataEntry) ([]*Field, error) {
+// each level-01 and level-77 entry, with the entries below it as fields,
+// laid out as the dialect lays them out.
+func Records(entries []*cobol.DataEntry, dialect cobol.Dialect) ([]*Field, error) {
 	records, err := buildTree(entries)
 	if err != nil {
 		return nil, err
 	}
 	for _, record := range records {
-		if err := place(record, 1, "DISPLAY"); err != nil {
+		if err := place(record, 1, "DISPLAY", dialect); err != nil {
 			return nil, err
 		}
 	}
@@ -116,13 +117,13 @@ func newField(e *cobol.DataEntry) *Field {
 
 // place sets the position and length of f, starting at start, and of
 // everything under it. A field without a usage takes its group's.
-func place(f *Field, start int, usage string) error {
+func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
 	f.Start = start
 	if f.Usage == "" {
 		f.Usage = usage
 	}
 	if len(f.Children) == 0 {
-		return f.placeElementary()
+		return f.placeElementary(dialect)
 	}
 	if f.Picture != "" {
 		return fmt.Errorf("%s: group %s has a picture", f.Pos, f.Name)
@@ -138,7 +139,7 @@ func place(f *Field, start int, usage string) error {
 			}
 			childStart = target.Start
 		}
-		if err := place(child, childStart, f.Usage); err != nil {
+		if err := place(child, childStart, f.Usage, dialect); err != nil {
 			return err
 		}
 		if child.Redefines == "" {
@@ -150,7 +151,7 @@ func place(f *Field, start int, usage string) error {
 	return nil
 }
 
-func (f *Field) placeElementary() error {
+func (f *Field) placeElementary(dialect cobol.Dialect) error {
 	if f.Picture == "" {
 		return fmt.Errorf("%s: elementary %s has no picture", f.Pos, f.Name)
 	}
@@ -158,7 +159,7 @@ func (f *Field) placeElementary() error {
 	if err != nil {
 		return fmt.Errorf("%s: %s: %w", f.Pos, f.Name, err)
 	}
-	f.Length, err = storageSize(p, f.Usage)
+	f.Length, err = storageSize(p, f.Usage, dialect)
 	if err != nil {
 		return fmt.Errorf("%s: %s: %w", f.Pos, f.Name, err)
 	}

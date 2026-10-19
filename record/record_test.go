@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/vlumi/copal/bedrock/cobol"
 )
 
 func acctMaster(t *testing.T) *Layout {
 	t.Helper()
-	l, err := FromCopybook("../../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD")
+	l, err := FromCopybook("../../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD", cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +89,7 @@ func TestErrors(t *testing.T) {
 }
 
 func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
-	l, err := FromCopybook("../../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD")
+	l, err := FromCopybook("../../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD", cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +99,7 @@ func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
 }
 
 func TestPackedDecimal(t *testing.T) {
-	l, err := FromCopybook("testdata/PACKED.cpy", nil, "PACKED-RECORD")
+	l, err := FromCopybook("testdata/PACKED.cpy", nil, "PACKED-RECORD", cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}

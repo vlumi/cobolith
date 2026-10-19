@@ -25,13 +25,14 @@ type Layout struct {
 	fields map[string]*layout.Field
 }
 
-// FromCopybook reads the layout of the named record in a copybook.
-func FromCopybook(path string, copybookDirs []string, name string) (*Layout, error) {
+// FromCopybook reads the layout of the named record in a copybook, written
+// in the dialect.
+func FromCopybook(path string, copybookDirs []string, name string, dialect cobol.Dialect) (*Layout, error) {
 	entries, err := cobol.ReadDataEntries(path, copybookDirs)
 	if err != nil {
 		return nil, err
 	}
-	records, err := layout.Records(entries)
+	records, err := layout.Records(entries, dialect)
 	if err != nil {
 		return nil, err
 	}

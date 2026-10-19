@@ -56,7 +56,7 @@ func TestRecords(t *testing.T) {
            05  WS-B                    PIC 9(2).
        77  WS-I                        PIC 99.
 `
-	records, err := Records(entries(t, source))
+	records, err := Records(entries(t, source), cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestRecordsOccursDependingOn(t *testing.T) {
            05  WS-ITEM                 PIC X(10)
                    OCCURS 0 TO 20 TIMES DEPENDING ON WS-COUNT.
 `
-	records, err := Records(entries(t, source))
+	records, err := Records(entries(t, source), cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestRecordsErrors(t *testing.T) {
 	}
 	for name, source := range tests {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Records(entries(t, source)); err == nil {
+			if _, err := Records(entries(t, source), cobol.IBM); err == nil {
 				t.Error("built without error")
 			}
 		})

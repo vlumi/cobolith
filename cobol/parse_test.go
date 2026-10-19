@@ -1,7 +1,9 @@
 package cobol
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -143,5 +145,42 @@ func TestParseErrors(t *testing.T) {
 		if _, err := Parse("test", tokens); err == nil {
 			t.Errorf("%s: parsed without error", name)
 		}
+	}
+}
+
+func TestParseSectionsInFreeFormat(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. sections.
+procedure division.
+*> the run
+main section.
+    perform work
+    goback.
+work section.
+first-step.
+    move 1
+        to ws-a.
+second-step.
+    exit section.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, para := range p.Paragraphs {
+		got = append(got, fmt.Sprintf("%s/%s %d", para.Section, para.Name, len(para.Statements)))
+	}
+	want := []string{"MAIN/MAIN 2", "WORK/FIRST-STEP 1", "WORK/SECOND-STEP 1"}
+	if !slices.Equal(got, want) {
+		t.Errorf("paragraphs %q, want %q", got, want)
+	}
+	if !slices.Equal(p.Paragraphs[0].Comment, []string{"the run"}) {
+		t.Errorf("MAIN's comment %q, want the section header's", p.Paragraphs[0].Comment)
 	}
 }

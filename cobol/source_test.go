@@ -47,11 +47,11 @@ func TestLex(t *testing.T) {
 	if got := texts(tokens); !slices.Equal(got, want) {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
-	if pos := tokens[1].Pos; pos.Line != 2 || pos.Col != 12 || pos.InAreaA() {
-		t.Errorf("AMOUNT at %+v, want line 2, column 12, area B", pos)
+	if tok := tokens[1]; tok.Pos.Line != 2 || tok.Pos.Col != 12 || tok.AreaA {
+		t.Errorf("AMOUNT at %+v, want line 2, column 12, area B", tok.Pos)
 	}
-	if pos := tokens[0].Pos; !pos.InAreaA() {
-		t.Errorf("level 01 at %+v, want area A", pos)
+	if tok := tokens[0]; !tok.AreaA {
+		t.Errorf("level 01 at %+v, want area A", tok.Pos)
 	}
 }
 
@@ -177,5 +177,8 @@ move "a *> b" to ws-text *> not code
 	}
 	if !slices.Equal(tokens[0].Comment, []string{"the request"}) {
 		t.Errorf("comment %q", tokens[0].Comment)
+	}
+	if !tokens[0].AreaA || tokens[2].AreaA || !tokens[4].AreaA {
+		t.Error("in free format, the first token of each line, and only it, is where a header can start")
 	}
 }

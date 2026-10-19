@@ -29,12 +29,6 @@ func (p Pos) String() string {
 	return fmt.Sprintf("%s:%d", p.File, p.Line)
 }
 
-// InAreaA reports whether the position is in area A, where division,
-// section and paragraph headers start.
-func (p Pos) InAreaA() bool {
-	return p.Col >= areaAColumn && p.Col < areaBColumn
-}
-
 // Kind is the kind of a token.
 type Kind int
 
@@ -58,12 +52,15 @@ var commentEntryParagraphs = map[string]bool{
 
 // Token is one lexical unit of the source. Words are upper-cased: COBOL is
 // case-insensitive outside literals. Comment holds the comment lines just
-// before the token, if it is the first on its line.
+// before the token, if it is the first on its line. AreaA is set on a token
+// where a division, section or paragraph header can start: in area A in
+// fixed format, and first on its line in free format, which has no areas.
 type Token struct {
 	Kind    Kind
 	Text    string
 	Pos     Pos
 	Comment []string
+	AreaA   bool
 }
 
 func (t Token) String() string {
@@ -228,7 +225,7 @@ func (l *lexer) endCommentEntry() {
 func (l *lexer) startsCommentEntry() bool {
 	n := len(l.tokens)
 	return n >= 2 && l.tokens[n-1].Kind == Period &&
-		commentEntryParagraphs[l.tokens[n-2].Text] && l.tokens[n-2].Pos.InAreaA()
+		commentEntryParagraphs[l.tokens[n-2].Text] && l.tokens[n-2].AreaA
 }
 
 func (l *lexer) continuation(pos Pos, body []byte) error {
@@ -324,6 +321,7 @@ func (l *lexer) literal(body []byte, i int) int {
 }
 
 func (l *lexer) emit(t Token) {
+	t.AreaA = l.inAreaA(t.Pos)
 	if l.comment != nil {
 		t.Comment, l.comment = l.comment, nil
 	}
@@ -335,6 +333,14 @@ func (l *lexer) emit(t Token) {
 		l.picture = false
 	}
 	l.tokens = append(l.tokens, t)
+}
+
+// inAreaA reports whether a token at a position starts where a header can.
+func (l *lexer) inAreaA(pos Pos) bool {
+	if l.free {
+		return len(l.tokens) == 0 || l.tokens[len(l.tokens)-1].Pos.Line != pos.Line
+	}
+	return pos.Col >= areaAColumn && pos.Col < areaBColumn
 }
 
 // separator reports whether body[i] is a period, comma or semicolon that

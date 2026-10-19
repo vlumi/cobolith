@@ -2,6 +2,7 @@ package cobol
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 )
 
@@ -23,6 +24,9 @@ type Program struct {
 	// Declaratives are the sections of the DECLARATIVES, whose
 	// paragraphs come first among the paragraphs.
 	Declaratives []Declarative
+	// Contains are the programs nested in this one, which only it, and
+	// the programs it contains, can call.
+	Contains []*Program
 }
 
 // Declarative is a section of the DECLARATIVES: what its USE sentence
@@ -92,13 +96,24 @@ func ReadProgram(path string, copybookDirs []string) (*Program, error) {
 	return Parse(path, tokens)
 }
 
-// Parse parses the tokens of a program.
+// Parse parses the tokens of a program, and of the programs nested in it.
 func Parse(path string, tokens []Token) (*Program, error) {
-	divisions, err := splitDivisions(tokens)
+	own, nested, err := splitNested(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	divisions, err := splitDivisions(own)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	p := &Program{Path: path}
+	for _, n := range nested {
+		inner, err := Parse(path, n)
+		if err != nil {
+			return nil, err
+		}
+		p.Contains = append(p.Contains, inner)
+	}
 	if len(tokens) > 0 {
 		p.Comment = tokens[0].Comment
 	}
@@ -120,6 +135,66 @@ func Parse(path string, tokens []Token) (*Program, error) {
 		return nil, fmt.Errorf("%s: no PROGRAM-ID", path)
 	}
 	return p, nil
+}
+
+// splitNested separates a program's own tokens from those of the programs
+// nested in it, each from its IDENTIFICATION DIVISION through the END
+// PROGRAM that names it. The program's own END PROGRAM, if it has one,
+// ends it.
+func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
+	var open []string // the nested programs not yet ended, innermost last
+	start := 0
+	for i := 0; i < len(tokens); i++ {
+		switch {
+		case i > 0 && isDivision(tokens, i, "IDENTIFICATION", "ID"):
+			if len(open) == 0 {
+				start = i
+			}
+			open = append(open, programID(tokens, i))
+		case tokens[i].Is("END") && i+1 < len(tokens) && tokens[i+1].Is("PROGRAM"):
+			end := skipPast(tokens, i, Period)
+			name := ""
+			if i+2 < end {
+				name = tokens[i+2].Text
+			}
+			if len(open) == 0 {
+				if end+1 < len(tokens) {
+					return nil, nil, fmt.Errorf("%s: %s after END PROGRAM", tokens[end+1].Pos, tokens[end+1])
+				}
+				return own, nested, nil
+			}
+			if innermost := open[len(open)-1]; name != innermost {
+				return nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
+			}
+			if open = open[:len(open)-1]; len(open) == 0 {
+				nested = append(nested, tokens[start:end+1])
+			}
+			i = end
+		case len(open) == 0:
+			own = append(own, tokens[i])
+		}
+	}
+	if len(open) > 0 {
+		return nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
+	}
+	return own, nested, nil
+}
+
+// programID is the PROGRAM-ID of the program whose IDENTIFICATION
+// DIVISION starts at i.
+func programID(tokens []Token, i int) string {
+	for j := i; j+2 < len(tokens); j++ {
+		if tokens[j].Is("PROGRAM-ID") {
+			return tokens[j+2].Text
+		}
+	}
+	return ""
+}
+
+// isDivision reports whether a division header, by one of its names,
+// starts at i.
+func isDivision(tokens []Token, i int, names ...string) bool {
+	return i+1 < len(tokens) && tokens[i].Kind == Word && slices.Contains(names, tokens[i].Text) && tokens[i+1].Is("DIVISION")
 }
 
 // splitDivisions returns the tokens of each division after its header,

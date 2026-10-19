@@ -34,3 +34,17 @@ func (p *Program) procedure(name string) (first, last int, ok bool) {
 	}
 	return 0, 0, false
 }
+
+// Find finds a program by its PROGRAM-ID: the program itself, or one
+// nested in it, at any depth.
+func (p *Program) Find(id string) (*Program, bool) {
+	if p.ID == id {
+		return p, true
+	}
+	for _, inner := range p.Contains {
+		if found, ok := inner.Find(id); ok {
+			return found, true
+		}
+	}
+	return nil, false
+}

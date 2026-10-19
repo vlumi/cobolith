@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -297,5 +298,56 @@ main section.
 	}
 	if got := p.ErrorProcedures(p.Paragraphs[2].Statements[1]); got != nil {
 		t.Errorf("GOBACK runs %q on failure, want none", got)
+	}
+}
+
+func TestParseNestedPrograms(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. outer.
+procedure division.
+main section.
+    call "inner" using ws-a
+    goback.
+identification division.
+program-id. inner.
+data division.
+linkage section.
+01  lk-a                         pic 9.
+procedure division using lk-a.
+main section.
+    move 1 to lk-a
+    goback.
+end program inner.
+end program outer.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != "OUTER" || len(p.Paragraphs) != 1 || len(p.Paragraphs[0].Statements) != 2 {
+		t.Errorf("outer %s with %d paragraphs, want OUTER with MAIN of two statements", p.ID, len(p.Paragraphs))
+	}
+	if len(p.Contains) != 1 {
+		t.Fatalf("%d nested programs, want 1", len(p.Contains))
+	}
+	if inner := p.Contains[0]; inner.ID != "INNER" || !slices.Equal(inner.Using, []string{"LK-A"}) || len(inner.Linkage) != 1 {
+		t.Errorf("nested %s using %q, want INNER using LK-A", inner.ID, inner.Using)
+	}
+	for name, broken := range map[string]string{
+		"no END PROGRAM":        strings.Replace(source, "end program inner.\n", "", 1),
+		"after its END PROGRAM": source + "display 'x'.\n",
+	} {
+		tokens, err := Lex("test", []byte(broken))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse("test", tokens); err == nil {
+			t.Errorf("%s: parsed without error", name)
+		}
 	}
 }

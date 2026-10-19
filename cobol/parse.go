@@ -275,24 +275,27 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 }
 
 // parseProcedure splits the procedure division into paragraphs and parses
-// their statements. A header is a name in area A followed by a period, or by
-// SECTION and a period.
+// their statements. A header is a name in area A that ends a sentence, as
+// it follows a period, and is followed by a period, or by SECTION and a
+// period; a verb is no name. A section's statements before its first
+// paragraph, if any, are a paragraph named after the section.
 func (p *Program) parseProcedure(tokens []Token) error {
 	if len(tokens) > 0 && tokens[0].Is("USING") {
 		i := 1
-		for ; i < len(tokens) && tokens[i].Kind == Word && !tokens[i].Pos.InAreaA(); i++ {
+		for ; i < len(tokens) && tokens[i].Kind == Word && !tokens[i].AreaA; i++ {
 			p.Using = append(p.Using, tokens[i].Text)
 		}
 		tokens = tokens[i:]
 	}
 	section := ""
+	var header *Token // a section's header, until its first statement or paragraph
 	procedures := map[string]bool{}
 	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
 		switch {
-		case !t.Pos.InAreaA() || t.Kind != Word:
+		case !isHeader(tokens, i):
 		case i+2 < len(tokens) && tokens[i+1].Is("SECTION") && tokens[i+2].Kind == Period:
-			section = t.Text
+			section, header = t.Text, &tokens[i]
 			procedures[t.Text] = true
 			i += 2
 			continue
@@ -302,8 +305,13 @@ func (p *Program) parseProcedure(tokens []Token) error {
 			}
 			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Comment: t.Comment, Pos: t.Pos})
 			procedures[t.Text] = true
+			header = nil
 			i++
 			continue
+		}
+		if header != nil {
+			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: section, Section: section, Comment: header.Comment, Pos: header.Pos})
+			header = nil
 		}
 		if len(p.Paragraphs) == 0 {
 			return fmt.Errorf("%s: statements before the first paragraph are not supported yet", t.Pos)
@@ -324,6 +332,13 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		p.Paragraphs[i].Statements = statements
 	}
 	return nil
+}
+
+// isHeader reports whether the token at i can name a section or paragraph:
+// a word in area A, not a verb, that starts a sentence.
+func isHeader(tokens []Token, i int) bool {
+	t := tokens[i]
+	return t.Kind == Word && t.AreaA && !verbs[t.Text] && (i == 0 || tokens[i-1].Kind == Period)
 }
 
 func addConditionNames(names map[string]bool, entries []*DataEntry) {

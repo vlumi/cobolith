@@ -2,6 +2,7 @@ package cobol
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 )
 
@@ -20,6 +21,23 @@ type Program struct {
 	Linkage    []*DataEntry
 	Using      []string
 	Paragraphs []Paragraph
+	// Declaratives are the sections of the DECLARATIVES, whose
+	// paragraphs come first among the paragraphs.
+	Declaratives []Declarative
+	// Contains are the programs nested in this one, which only it, and
+	// the programs it contains, can call.
+	Contains []*Program
+}
+
+// Declarative is a section of the DECLARATIVES: what its USE sentence
+// says it is for, the files named or every file opened in one of the
+// modes named. The runtime runs it when an input or output statement on
+// one of them fails, and control goes on after that statement.
+type Declarative struct {
+	Section string
+	Files   []string
+	Modes   []string
+	Pos     Pos
 }
 
 // IdentificationEntry is an identification paragraph with a comment entry,
@@ -57,14 +75,16 @@ type FileDescription struct {
 
 // Paragraph is a paragraph of the procedure division: the tokens of its
 // body and the statements they make. Paragraphs before the first section
-// header have no section.
+// header have no section. A declarative paragraph is one of the
+// DECLARATIVES, which nothing performs or falls into.
 type Paragraph struct {
-	Name       string
-	Section    string
-	Body       []Token
-	Statements []Statement
-	Comment    []string
-	Pos        Pos
+	Name        string
+	Section     string
+	Declarative bool
+	Body        []Token
+	Statements  []Statement
+	Comment     []string
+	Pos         Pos
 }
 
 // ReadProgram reads and parses a program, expanding its copybooks.
@@ -76,13 +96,24 @@ func ReadProgram(path string, copybookDirs []string) (*Program, error) {
 	return Parse(path, tokens)
 }
 
-// Parse parses the tokens of a program.
+// Parse parses the tokens of a program, and of the programs nested in it.
 func Parse(path string, tokens []Token) (*Program, error) {
-	divisions, err := splitDivisions(tokens)
+	own, nested, err := splitNested(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	divisions, err := splitDivisions(own)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	p := &Program{Path: path}
+	for _, n := range nested {
+		inner, err := Parse(path, n)
+		if err != nil {
+			return nil, err
+		}
+		p.Contains = append(p.Contains, inner)
+	}
 	if len(tokens) > 0 {
 		p.Comment = tokens[0].Comment
 	}
@@ -104,6 +135,66 @@ func Parse(path string, tokens []Token) (*Program, error) {
 		return nil, fmt.Errorf("%s: no PROGRAM-ID", path)
 	}
 	return p, nil
+}
+
+// splitNested separates a program's own tokens from those of the programs
+// nested in it, each from its IDENTIFICATION DIVISION through the END
+// PROGRAM that names it. The program's own END PROGRAM, if it has one,
+// ends it.
+func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
+	var open []string // the nested programs not yet ended, innermost last
+	start := 0
+	for i := 0; i < len(tokens); i++ {
+		switch {
+		case i > 0 && isDivision(tokens, i, "IDENTIFICATION", "ID"):
+			if len(open) == 0 {
+				start = i
+			}
+			open = append(open, programID(tokens, i))
+		case tokens[i].Is("END") && i+1 < len(tokens) && tokens[i+1].Is("PROGRAM"):
+			end := skipPast(tokens, i, Period)
+			name := ""
+			if i+2 < end {
+				name = tokens[i+2].Text
+			}
+			if len(open) == 0 {
+				if end+1 < len(tokens) {
+					return nil, nil, fmt.Errorf("%s: %s after END PROGRAM", tokens[end+1].Pos, tokens[end+1])
+				}
+				return own, nested, nil
+			}
+			if innermost := open[len(open)-1]; name != innermost {
+				return nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
+			}
+			if open = open[:len(open)-1]; len(open) == 0 {
+				nested = append(nested, tokens[start:end+1])
+			}
+			i = end
+		case len(open) == 0:
+			own = append(own, tokens[i])
+		}
+	}
+	if len(open) > 0 {
+		return nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
+	}
+	return own, nested, nil
+}
+
+// programID is the PROGRAM-ID of the program whose IDENTIFICATION
+// DIVISION starts at i.
+func programID(tokens []Token, i int) string {
+	for j := i; j+2 < len(tokens); j++ {
+		if tokens[j].Is("PROGRAM-ID") {
+			return tokens[j+2].Text
+		}
+	}
+	return ""
+}
+
+// isDivision reports whether a division header, by one of its names,
+// starts at i.
+func isDivision(tokens []Token, i int, names ...string) bool {
+	return i+1 < len(tokens) && tokens[i].Kind == Word && slices.Contains(names, tokens[i].Text) && tokens[i+1].Is("DIVISION")
 }
 
 // splitDivisions returns the tokens of each division after its header,
@@ -321,10 +412,7 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 }
 
 // parseProcedure splits the procedure division into paragraphs and parses
-// their statements. A header is a name in area A that ends a sentence, as
-// it follows a period, and is followed by a period, or by SECTION and a
-// period; a verb is no name. A section's statements before its first
-// paragraph, if any, are a paragraph named after the section.
+// their statements.
 func (p *Program) parseProcedure(tokens []Token) error {
 	if len(tokens) > 0 && tokens[0].Is("USING") {
 		i := 1
@@ -333,37 +421,13 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		}
 		tokens = tokens[i:]
 	}
-	section := ""
-	var header *Token // a section's header, until its first statement or paragraph
-	procedures := map[string]bool{}
+	s := &splitter{program: p, procedures: map[string]bool{}}
 	for i := 0; i < len(tokens); i++ {
-		t := tokens[i]
-		switch {
-		case !isHeader(tokens, i):
-		case i+2 < len(tokens) && tokens[i+1].Is("SECTION") && tokens[i+2].Kind == Period:
-			section, header = t.Text, &tokens[i]
-			procedures[t.Text] = true
-			i += 2
-			continue
-		case i+1 < len(tokens) && tokens[i+1].Kind == Period:
-			if procedures[t.Text] {
-				return fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
-			}
-			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: t.Text, Section: section, Comment: t.Comment, Pos: t.Pos})
-			procedures[t.Text] = true
-			header = nil
-			i++
-			continue
+		taken, err := s.take(tokens, i)
+		if err != nil {
+			return err
 		}
-		if header != nil {
-			p.Paragraphs = append(p.Paragraphs, Paragraph{Name: section, Section: section, Comment: header.Comment, Pos: header.Pos})
-			header = nil
-		}
-		if len(p.Paragraphs) == 0 {
-			return fmt.Errorf("%s: statements before the first paragraph are not supported yet", t.Pos)
-		}
-		last := &p.Paragraphs[len(p.Paragraphs)-1]
-		last.Body = append(last.Body, t)
+		i += taken
 	}
 	conditions := map[string]bool{}
 	for _, fd := range p.FileSection {
@@ -371,13 +435,98 @@ func (p *Program) parseProcedure(tokens []Token) error {
 	}
 	addConditionNames(conditions, p.WorkingStorage)
 	for i := range p.Paragraphs {
-		statements, err := ParseStatements(p.Paragraphs[i].Body, procedures, conditions)
+		statements, err := ParseStatements(p.Paragraphs[i].Body, s.procedures, conditions)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.Paragraphs[i].Name, err)
 		}
 		p.Paragraphs[i].Statements = statements
 	}
 	return nil
+}
+
+// splitter splits the procedure division into paragraphs. A header is a
+// name in area A that ends a sentence, as it follows a period, and is
+// followed by a period, or by SECTION and a period; a verb is no name. A
+// section's statements before its first paragraph, if any, are a
+// paragraph named after the section. The DECLARATIVES come first, each
+// section of them starting with its USE sentence.
+type splitter struct {
+	program     *Program
+	procedures  map[string]bool
+	section     string
+	header      *Token // a section's header, until its first statement or paragraph
+	declarative bool
+}
+
+// take takes the token at i, and returns how many tokens after it it took
+// with it.
+func (s *splitter) take(tokens []Token, i int) (int, error) {
+	t := tokens[i]
+	switch {
+	case t.Is("DECLARATIVES") && i+1 < len(tokens) && tokens[i+1].Kind == Period:
+		s.declarative = true
+		return 1, nil
+	case t.Is("END") && i+2 < len(tokens) && tokens[i+1].Is("DECLARATIVES") && tokens[i+2].Kind == Period:
+		s.declarative, s.section, s.header = false, "", nil
+		return 2, nil
+	case t.Is("USE") && s.header != nil:
+		return s.use(tokens, i)
+	case !isHeader(tokens, i):
+	case i+2 < len(tokens) && tokens[i+1].Is("SECTION") && tokens[i+2].Kind == Period:
+		s.section, s.header = t.Text, &tokens[i]
+		s.procedures[t.Text] = true
+		return 2, nil
+	case i+1 < len(tokens) && tokens[i+1].Kind == Period:
+		if s.procedures[t.Text] {
+			return 0, fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
+		}
+		s.paragraph(t.Text, t)
+		s.procedures[t.Text] = true
+		return 1, nil
+	}
+	if s.header != nil {
+		s.paragraph(s.section, *s.header)
+	}
+	paragraphs := s.program.Paragraphs
+	if len(paragraphs) == 0 {
+		return 0, fmt.Errorf("%s: statements before the first paragraph are not supported yet", t.Pos)
+	}
+	paragraphs[len(paragraphs)-1].Body = append(paragraphs[len(paragraphs)-1].Body, t)
+	return 0, nil
+}
+
+// paragraph starts a paragraph, at its header or the header of the
+// section it is the statements of.
+func (s *splitter) paragraph(name string, header Token) {
+	s.program.Paragraphs = append(s.program.Paragraphs, Paragraph{
+		Name: name, Section: s.section, Declarative: s.declarative, Comment: header.Comment, Pos: header.Pos,
+	})
+	s.header = nil
+}
+
+// use reads the USE sentence that starts a section of the DECLARATIVES:
+// USE [GLOBAL] AFTER [STANDARD] EXCEPTION|ERROR PROCEDURE [ON] followed by
+// file names or open modes.
+func (s *splitter) use(tokens []Token, i int) (int, error) {
+	at := tokens[i].Pos
+	if !s.declarative {
+		return 0, fmt.Errorf("%s: USE outside the DECLARATIVES", at)
+	}
+	d := Declarative{Section: s.section, Pos: at}
+	j := i + 1
+	for ; j < len(tokens) && tokens[j].Kind != Period; j++ {
+		switch t := tokens[j]; t.Text {
+		case "GLOBAL", "AFTER", "STANDARD", "EXCEPTION", "ERROR", "PROCEDURE", "ON":
+		case "INPUT", "OUTPUT", "I-O", "EXTEND":
+			d.Modes = append(d.Modes, t.Text)
+		case "FOR", "DEBUGGING":
+			return 0, fmt.Errorf("%s: USE FOR DEBUGGING is not supported yet", at)
+		default:
+			d.Files = append(d.Files, t.Text)
+		}
+	}
+	s.program.Declaratives = append(s.program.Declaratives, d)
+	return j - i, nil
 }
 
 // isHeader reports whether the token at i can name a section or paragraph:

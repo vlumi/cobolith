@@ -273,3 +273,34 @@ func TestNestedPhrases(t *testing.T) {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestReturning(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. ends.
+procedure division.
+main section.
+    if ws-a = 1
+        stop run returning 16
+    end-if
+    goback returning ws-result.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	describe(&b, p.Paragraphs[0].Statements, "")
+	want := `IF [WS-A = 1]
+  THEN
+    STOP reads 16 writes RETURN-CODE
+GOBACK reads WS-RESULT writes RETURN-CODE
+`
+	if b.String() != want {
+		t.Errorf("got\n%s\nwant\n%s", b.String(), want)
+	}
+}

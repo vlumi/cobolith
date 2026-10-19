@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -184,6 +185,21 @@ second-step.
 	if !slices.Equal(p.Paragraphs[0].Comment, []string{"the run"}) {
 		t.Errorf("MAIN's comment %q, want the section header's", p.Paragraphs[0].Comment)
 	}
+	for _, c := range []struct {
+		ref         ProcedureRef
+		first, last int
+		ok          bool
+	}{
+		{ProcedureRef{Name: "WORK"}, 1, 2, true},
+		{ProcedureRef{Name: "FIRST-STEP"}, 1, 1, true},
+		{ProcedureRef{Name: "MAIN", Thru: "WORK"}, 0, 2, true},
+		{ProcedureRef{Name: "SECOND-STEP", Thru: "FIRST-STEP"}, 2, 1, false},
+		{ProcedureRef{Name: "NONE"}, 0, 0, false},
+	} {
+		if first, last, ok := p.Span(c.ref); ok != c.ok || ok && (first != c.first || last != c.last) {
+			t.Errorf("span of %+v: %d to %d, %v; want %d to %d, %v", c.ref, first, last, ok, c.first, c.last, c.ok)
+		}
+	}
 }
 
 func TestParseFileClauses(t *testing.T) {
@@ -231,5 +247,107 @@ main section.
 	}
 	if want := []string{"SLOTS 9 9  1", "LINES-IN 14 61 WS-LENGTH 2"}; !slices.Equal(got, want) {
 		t.Errorf("file descriptions %q, want %q", got, want)
+	}
+}
+
+func TestParseDeclaratives(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. errors.
+procedure division.
+declaratives.
+file-errors section.
+    use after error procedure on in-file out-file.
+note-failure.
+    move "y" to ws-failed.
+open-errors section.
+    use after standard exception procedure input.
+    move "o" to ws-failed.
+end declaratives.
+main section.
+    open input in-file
+    goback.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, para := range p.Paragraphs {
+		got = append(got, fmt.Sprintf("%s/%s %v %d", para.Section, para.Name, para.Declarative, len(para.Statements)))
+	}
+	want := []string{"FILE-ERRORS/NOTE-FAILURE true 1", "OPEN-ERRORS/OPEN-ERRORS true 1", "MAIN/MAIN false 2"}
+	if !slices.Equal(got, want) {
+		t.Errorf("paragraphs %q, want %q", got, want)
+	}
+	got = nil
+	for _, d := range p.Declaratives {
+		got = append(got, fmt.Sprintf("%s %v %v", d.Section, d.Files, d.Modes))
+	}
+	want = []string{"FILE-ERRORS [IN-FILE OUT-FILE] []", "OPEN-ERRORS [] [INPUT]"}
+	if !slices.Equal(got, want) {
+		t.Errorf("declaratives %q, want %q", got, want)
+	}
+	open := p.Paragraphs[2].Statements[0]
+	if got, want := p.ErrorProcedures(open), []string{"FILE-ERRORS", "OPEN-ERRORS"}; !slices.Equal(got, want) {
+		t.Errorf("an OPEN of IN-FILE runs %q on failure, want %q", got, want)
+	}
+	if got := p.ErrorProcedures(p.Paragraphs[2].Statements[1]); got != nil {
+		t.Errorf("GOBACK runs %q on failure, want none", got)
+	}
+}
+
+func TestParseNestedPrograms(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. outer.
+procedure division.
+main section.
+    call "inner" using ws-a
+    goback.
+identification division.
+program-id. inner.
+data division.
+linkage section.
+01  lk-a                         pic 9.
+procedure division using lk-a.
+main section.
+    move 1 to lk-a
+    goback.
+end program inner.
+end program outer.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != "OUTER" || len(p.Paragraphs) != 1 || len(p.Paragraphs[0].Statements) != 2 {
+		t.Errorf("outer %s with %d paragraphs, want OUTER with MAIN of two statements", p.ID, len(p.Paragraphs))
+	}
+	if len(p.Contains) != 1 {
+		t.Fatalf("%d nested programs, want 1", len(p.Contains))
+	}
+	if inner := p.Contains[0]; inner.ID != "INNER" || !slices.Equal(inner.Using, []string{"LK-A"}) || len(inner.Linkage) != 1 {
+		t.Errorf("nested %s using %q, want INNER using LK-A", inner.ID, inner.Using)
+	}
+	for name, broken := range map[string]string{
+		"no END PROGRAM":        strings.Replace(source, "end program inner.\n", "", 1),
+		"after its END PROGRAM": source + "display 'x'.\n",
+	} {
+		tokens, err := Lex("test", []byte(broken))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse("test", tokens); err == nil {
+			t.Errorf("%s: parsed without error", name)
+		}
 	}
 }

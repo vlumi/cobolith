@@ -245,12 +245,16 @@ func (p *statementParser) statement() (Statement, error) {
 	case "SORT":
 		err = p.sort(&s)
 	case "STOP":
-		err = p.expect("RUN")
+		if err = p.expect("RUN"); err == nil {
+			err = p.returning(&s)
+		}
 	case "EXIT":
 		if t := p.peek(); p.optional("PARAGRAPH", "PROGRAM", "SECTION", "PERFORM") {
 			s.Verb += " " + t.Text
 		}
-	case "CONTINUE", "GOBACK":
+	case "GOBACK":
+		err = p.returning(&s)
+	case "CONTINUE":
 	}
 	if err != nil {
 		return Statement{}, fmt.Errorf("%s: %s: %w", verb.Pos, verb.Text, err)
@@ -281,6 +285,23 @@ func joinTokens(tokens []Token) string {
 		b.WriteString(t.String())
 	}
 	return b.String()
+}
+
+// returning parses the RETURNING or GIVING phrase of STOP RUN or GOBACK,
+// if it has one: the value the program ends with, which it gives
+// RETURN-CODE.
+func (p *statementParser) returning(s *Statement) error {
+	at := p.peek().Pos
+	if !p.optional("RETURNING", "GIVING") {
+		return nil
+	}
+	op, err := p.operand()
+	if err != nil {
+		return err
+	}
+	s.Reads = append(s.Reads, op)
+	s.Writes = append(s.Writes, Operand{Text: "RETURN-CODE", Name: "RETURN-CODE", Refs: []string{"RETURN-CODE"}, Pos: at})
+	return nil
 }
 
 // operand parses a data item with its subscripts or reference

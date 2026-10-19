@@ -248,3 +248,54 @@ main section.
 		t.Errorf("file descriptions %q, want %q", got, want)
 	}
 }
+
+func TestParseDeclaratives(t *testing.T) {
+	source := `>>source format is free
+identification division.
+program-id. errors.
+procedure division.
+declaratives.
+file-errors section.
+    use after error procedure on in-file out-file.
+note-failure.
+    move "y" to ws-failed.
+open-errors section.
+    use after standard exception procedure input.
+    move "o" to ws-failed.
+end declaratives.
+main section.
+    open input in-file
+    goback.
+`
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("test", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, para := range p.Paragraphs {
+		got = append(got, fmt.Sprintf("%s/%s %v %d", para.Section, para.Name, para.Declarative, len(para.Statements)))
+	}
+	want := []string{"FILE-ERRORS/NOTE-FAILURE true 1", "OPEN-ERRORS/OPEN-ERRORS true 1", "MAIN/MAIN false 2"}
+	if !slices.Equal(got, want) {
+		t.Errorf("paragraphs %q, want %q", got, want)
+	}
+	got = nil
+	for _, d := range p.Declaratives {
+		got = append(got, fmt.Sprintf("%s %v %v", d.Section, d.Files, d.Modes))
+	}
+	want = []string{"FILE-ERRORS [IN-FILE OUT-FILE] []", "OPEN-ERRORS [] [INPUT]"}
+	if !slices.Equal(got, want) {
+		t.Errorf("declaratives %q, want %q", got, want)
+	}
+	open := p.Paragraphs[2].Statements[0]
+	if got, want := p.ErrorProcedures(open), []string{"FILE-ERRORS", "OPEN-ERRORS"}; !slices.Equal(got, want) {
+		t.Errorf("an OPEN of IN-FILE runs %q on failure, want %q", got, want)
+	}
+	if got := p.ErrorProcedures(p.Paragraphs[2].Statements[1]); got != nil {
+		t.Errorf("GOBACK runs %q on failure, want none", got)
+	}
+}

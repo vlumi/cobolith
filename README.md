@@ -40,7 +40,7 @@ Packed decimal and display numbers are laid out alike in both, and so are `COMP-
 ## What it has been run against
 
 - **Two COBOL systems written for it**, in [Copal](https://github.com/vlumi/copal), which reads COBOL batch systems with it: a bank in IBM COBOL, fixed format and run by JCL, and a card processor in Micro Focus COBOL, free format and run by shell scripts. Every program of both is read and laid out, and both are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
-- **NIST's COBOL-85 test suite**, CCVS85: 383 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
+- **NIST's COBOL-85 test suite**, CCVS85: 388 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
 - **Its own tests**: tables of statement forms and of data description entries, the latter laid out in both dialects, each with what it reads as or the error it stops with. They cover 86% of the statements of `cobol`, 90% of `layout`, and 93% of `record` and of `jcl`.
 
 ## What it does not read yet
@@ -50,7 +50,6 @@ Each is an error that says so, with the file and line:
 - `SYNCHRONIZED`, whose slack bytes depend on the compiler and, in a table, on each occurrence; and `USAGE POINTER`, whose size depends on the platform.
 - `RENAMES`, level 66, and `PIC N`, national characters.
 - `REPLACE`, and `DECIMAL-POINT IS COMMA`.
-- A paragraph name repeated in another section: a reference by name alone would find the wrong one.
 - The report writer, the communication module, and debugging declaratives, `USE FOR DEBUGGING`.
 - Dialects other than IBM and Micro Focus COBOL, and the additions of the 2002 and 2014 standards beyond those the two share; `EXEC SQL` and `EXEC CICS`.
 

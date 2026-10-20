@@ -546,3 +546,45 @@ func TestProgramsOneAfterTheOther(t *testing.T) {
 		t.Error("Parse read two programs as one")
 	}
 }
+
+// A paragraph name may repeat in another section: a reference by the name
+// alone is to its own section's, a reference with OF to the section's
+// named, and a name alone that two other sections have is an error.
+func TestParagraphsOfSections(t *testing.T) {
+	head := "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. SECTIONS.\n       PROCEDURE DIVISION.\n"
+	sections := "" +
+		"       FIRST-SECTION SECTION.\n       STEP.\n           EXIT.\n       FIRST-MAIN.\n           PERFORM STEP.\n" +
+		"       SECOND-SECTION SECTION.\n       STEP.\n           EXIT.\n"
+	tokens, err := Lex("SECTIONS.cbl", []byte(head+sections+
+		"       THIRD-SECTION SECTION.\n       THIRD-MAIN.\n           PERFORM STEP OF SECOND-SECTION THRU STEP IN SECOND-SECTION\n           STOP RUN.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("SECTIONS.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spans := map[string]int{}
+	for _, para := range p.Paragraphs {
+		for _, s := range para.Statements {
+			if len(s.Procedures) > 0 {
+				first, _, ok := p.Span(s.Procedures[0])
+				if !ok {
+					t.Fatalf("%s: no span for %+v", para.Name, s.Procedures[0])
+				}
+				spans[para.Name] = first
+			}
+		}
+	}
+	if p.Paragraphs[spans["FIRST-MAIN"]].Section != "FIRST-SECTION" || p.Paragraphs[spans["THIRD-MAIN"]].Section != "SECOND-SECTION" {
+		t.Errorf("FIRST-MAIN performs %+v, THIRD-MAIN %+v", p.Paragraphs[spans["FIRST-MAIN"]], p.Paragraphs[spans["THIRD-MAIN"]])
+	}
+	ambiguous, err := Lex("SECTIONS.cbl", []byte(head+sections+
+		"       THIRD-SECTION SECTION.\n       THIRD-MAIN.\n           PERFORM STEP.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse("SECTIONS.cbl", ambiguous); err == nil {
+		t.Error("parsed PERFORM STEP, which two other sections have")
+	}
+}

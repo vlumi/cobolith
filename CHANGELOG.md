@@ -4,6 +4,10 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- A paragraph name may repeat in another section. `ProcedureRef` has the `Section` and `ThruSection` of the paragraphs it names, as written after `OF` or `IN`, or as the program resolves a name alone: to its own section's paragraph by that name, or the only one. `Span` finds the paragraph of that section. A name alone that more than one other section has is an error. Of NIST's COBOL-85 suite, 388 programs of 459 are read, from 383.
+
 ## [0.2.0] - 2026-10-20
 
 ### Added

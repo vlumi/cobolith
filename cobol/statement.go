@@ -116,7 +116,7 @@ var keywords = map[string]bool{
 	"REPLACING": true, "TALLYING": true, "CONVERTING": true, "DELIMITER": true, "COUNT": true,
 	"CHARACTERS": true, "LEADING": true, "FIRST": true, "INITIAL": true, "FOR": true, "DATA": true,
 	"ALPHANUMERIC": true, "ALPHANUMERIC-EDITED": true, "NUMERIC-EDITED": true, "NATIONAL": true,
-	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true,
+	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true, "VALUE": true,
 	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
@@ -266,7 +266,12 @@ func (p *statementParser) statement() (Statement, error) {
 	case "SORT", "MERGE":
 		err = p.sort(&s)
 	case "STOP":
-		if err = p.expect("RUN"); err == nil {
+		if t := p.peek(); t.isLiteral() || t.Kind == Word && isNumber(t.Text) {
+			// STOP literal shows the literal and waits for the operator; the run
+			// goes on, so it is not STOP RUN's verb.
+			s.Verb = "STOP LITERAL"
+			s.Reads = []Operand{{Text: p.next().String(), Pos: t.Pos}}
+		} else if err = p.expect("RUN"); err == nil {
 			err = p.returning(&s)
 		}
 	case "EXIT":
@@ -1201,9 +1206,10 @@ func (p *statementParser) start(s *Statement) error {
 	return p.conditionalPhrases(s, "END-START", "INVALID KEY")
 }
 
-// call parses CALL program [USING [BY REFERENCE | BY CONTENT] items].
-// Items passed by reference may be changed by the program called, so they
-// are both read and written; those by content only read.
+// call parses CALL program [USING [[BY] REFERENCE | [BY] CONTENT | [BY]
+// VALUE] items]. Items passed by reference may be changed by the program
+// called, so they are both read and written; those by content or value
+// only read.
 func (p *statementParser) call(s *Statement) error {
 	program, err := p.operand()
 	if err != nil {
@@ -1218,9 +1224,9 @@ func (p *statementParser) call(s *Statement) error {
 	if p.optional("USING") {
 		byContent := false
 		for {
-			if p.optional("BY") {
-				byContent = p.optional("CONTENT")
-				p.optional("REFERENCE")
+			p.optional("BY")
+			if p.peek().Is("CONTENT") || p.peek().Is("VALUE") || p.peek().Is("REFERENCE") {
+				byContent = !p.next().Is("REFERENCE")
 			}
 			items, err := p.operands()
 			if err != nil {

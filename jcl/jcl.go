@@ -66,6 +66,7 @@ func (c Cond) Bypasses(rc int) bool {
 // dataset, creates a new one, or appends to one, creating it if needed.
 type Disp string
 
+// The dispositions.
 const (
 	Shr Disp = "SHR"
 	Old Disp = "OLD"

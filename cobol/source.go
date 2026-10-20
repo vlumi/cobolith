@@ -35,6 +35,7 @@ func (p Pos) String() string {
 // Kind is the kind of a token.
 type Kind int
 
+// The kinds of token.
 const (
 	Word   Kind = iota // a name, reserved word, number or picture string
 	String             // a quoted literal, without its quotes

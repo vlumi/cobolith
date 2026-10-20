@@ -1,0 +1,192 @@
+package cobol
+
+import (
+	"strings"
+	"testing"
+)
+
+// statementsOf parses statements of a paragraph and describes them.
+func statementsOf(t *testing.T, body string) (string, error) {
+	t.Helper()
+	source := ">>SOURCE FORMAT IS FREE\nIDENTIFICATION DIVISION.\nPROGRAM-ID. FORMS.\nPROCEDURE DIVISION.\nMAIN-PARA.\n" +
+		body + "\n    .\nOTHER-PARA.\n    EXIT.\nOTHER-EXIT.\n    EXIT.\n"
+	tokens, err := Lex("FORMS.cbl", []byte(source))
+	if err != nil {
+		return "", err
+	}
+	p, err := Parse("FORMS.cbl", tokens)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	describe(&b, p.Paragraphs[0].Statements, "")
+	return b.String(), nil
+}
+
+// forms are statements in forms the specimens do not all use, each with
+// what it parses to.
+var forms = []struct{ statement, want string }{
+	{"ADD WS-A WS-B TO WS-C ROUNDED ON SIZE ERROR DISPLAY 'BIG' NOT ON SIZE ERROR DISPLAY 'OK' END-ADD", `ADD reads WS-A, WS-B, WS-C writes WS-C
+  ON SIZE ERROR
+    DISPLAY reads 'BIG'
+  NOT ON SIZE ERROR
+    DISPLAY reads 'OK'
+`},
+	{"ADD WS-A TO WS-B GIVING WS-C", `ADD reads WS-A, WS-B writes WS-C
+`},
+	{"SUBTRACT WS-A FROM WS-B GIVING WS-C", `SUBTRACT reads WS-A, WS-B writes WS-C
+`},
+	{"MULTIPLY WS-A BY WS-B GIVING WS-C ROUNDED", `MULTIPLY reads WS-A, WS-B writes WS-C
+`},
+	{"DIVIDE WS-A INTO WS-B GIVING WS-C REMAINDER WS-D", `DIVIDE reads WS-A, WS-B writes WS-C, WS-D
+`},
+	{"DIVIDE WS-A BY WS-B GIVING WS-C", `DIVIDE reads WS-A, WS-B writes WS-C
+`},
+	{"COMPUTE WS-C ROUNDED = WS-A ** 2 ON SIZE ERROR DISPLAY 'BIG' END-COMPUTE", `COMPUTE reads WS-A ** 2 writes WS-C
+  ON SIZE ERROR
+    DISPLAY reads 'BIG'
+`},
+	{"STRING WS-A DELIMITED BY SPACE ',' DELIMITED BY SIZE INTO WS-B WITH POINTER WS-P ON OVERFLOW DISPLAY 'FULL' END-STRING", `STRING reads WS-A, SPACE, ',', WS-P writes WS-B, WS-P
+  ON OVERFLOW
+    DISPLAY reads 'FULL'
+`},
+	{"UNSTRING WS-A DELIMITED BY ',' INTO WS-B WS-C END-UNSTRING", `UNSTRING reads WS-A, ',' writes WS-B, WS-C
+`},
+	{"INSPECT WS-A TALLYING WS-N FOR ALL ','", `INSPECT reads WS-A, WS-N, ',' writes WS-N
+`},
+	{"INSPECT WS-A REPLACING ALL ',' BY ' '", `INSPECT reads WS-A, ',', ' ' writes WS-A
+`},
+	{"INSPECT WS-A TALLYING WS-N FOR CHARACTERS BEFORE INITIAL '.' WS-M FOR LEADING '0' ALL ' ' '-'", `INSPECT reads WS-A, WS-N, '.', WS-M, '0', ' ', '-' writes WS-N, WS-M
+`},
+	{"INSPECT WS-A REPLACING CHARACTERS BY '*' AFTER INITIAL WS-B FIRST 'A' BY 'B' LEADING '0' BY ' '", `INSPECT reads WS-A, '*', WS-B, 'A', 'B', '0', ' ' writes WS-A
+`},
+	{"INSPECT WS-A CONVERTING 'abc' TO 'ABC' BEFORE INITIAL SPACE", `INSPECT reads WS-A, 'abc', 'ABC', SPACE writes WS-A
+`},
+	{"UNSTRING WS-A DELIMITED BY ALL SPACE OR ',' INTO WS-B DELIMITER IN WS-D COUNT IN WS-N WS-C WITH POINTER WS-P TALLYING IN WS-T ON OVERFLOW DISPLAY 'MORE' END-UNSTRING", `UNSTRING reads WS-A, SPACE, ',', WS-P, WS-T writes WS-B, WS-D, WS-N, WS-C, WS-P, WS-T
+  ON OVERFLOW
+    DISPLAY reads 'MORE'
+`},
+	{"WRITE OUT-RECORD FROM WS-LINE AFTER ADVANCING 2 LINES", `WRITE reads WS-LINE, 2 writes OUT-RECORD
+`},
+	{"WRITE OUT-RECORD BEFORE ADVANCING PAGE", `WRITE writes OUT-RECORD
+`},
+	{"WRITE OUT-RECORD INVALID KEY DISPLAY 'DUP' NOT INVALID KEY DISPLAY 'NEW' END-WRITE", `WRITE writes OUT-RECORD
+  INVALID KEY
+    DISPLAY reads 'DUP'
+  NOT INVALID KEY
+    DISPLAY reads 'NEW'
+`},
+	{"READ IN-FILE NEXT RECORD INTO WS-REC AT END SET WS-EOF TO TRUE END-READ", `READ file IN-FILE writes WS-REC
+  AT END
+    SET writes WS-EOF
+`},
+	{"READ IN-FILE KEY IS IN-KEY INVALID KEY DISPLAY 'NONE' END-READ", `READ file IN-FILE reads IN-KEY
+  INVALID KEY
+    DISPLAY reads 'NONE'
+`},
+	{"REWRITE OUT-RECORD", `REWRITE writes OUT-RECORD
+`},
+	{"DELETE IN-FILE RECORD INVALID KEY DISPLAY 'NONE' END-DELETE", `DELETE file IN-FILE
+  INVALID KEY
+    DISPLAY reads 'NONE'
+`},
+	{"START IN-FILE KEY IS NOT LESS THAN IN-KEY INVALID KEY DISPLAY 'NONE' END-START", `START file IN-FILE reads IN-KEY
+  INVALID KEY
+    DISPLAY reads 'NONE'
+`},
+	{"SET WS-I UP BY 1", `SET reads WS-I, 1 writes WS-I
+`},
+	{"SET WS-I DOWN BY WS-N", `SET reads WS-I, WS-N writes WS-I
+`},
+	{"SET WS-DONE WS-SEEN TO TRUE", `SET writes WS-DONE, WS-SEEN
+`},
+	{"SET WS-I TO 3", `SET reads 3 writes WS-I
+`},
+	{"SORT WORK-FILE ON ASCENDING KEY WK-A DESCENDING KEY WK-B USING IN-FILE GIVING OUT-FILE", `SORT file WORK-FILE file INPUT IN-FILE file OUTPUT OUT-FILE reads WK-A, WK-B
+`},
+	{"SORT WORK-FILE ON ASCENDING KEY WK-A INPUT PROCEDURE IS OTHER-PARA OUTPUT PROCEDURE IS OTHER-EXIT", `SORT -> OTHER-PARA -> OTHER-EXIT file WORK-FILE reads WK-A
+`},
+	{"MERGE WORK-FILE ON ASCENDING KEY WK-A USING IN-FILE OTHER-FILE GIVING OUT-FILE", `MERGE file WORK-FILE file INPUT IN-FILE file INPUT OTHER-FILE file OUTPUT OUT-FILE reads WK-A
+`},
+	{"RELEASE WORK-RECORD FROM WS-REC", `RELEASE reads WS-REC writes WORK-RECORD
+`},
+	{"RETURN WORK-FILE INTO WS-REC AT END SET WS-EOF TO TRUE END-RETURN", `RETURN file WORK-FILE writes WS-REC
+  AT END
+    SET writes WS-EOF
+`},
+	{"SEARCH ALL WS-ENTRY AT END DISPLAY 'NONE' WHEN WS-CODE(WS-X) = 'A' DISPLAY 'A' END-SEARCH", `SEARCH reads WS-ENTRY
+  AT END
+    DISPLAY reads 'NONE'
+  WHEN [WS-CODE(WS-X) = 'A']
+    DISPLAY reads 'A'
+`},
+	{"PERFORM OTHER-PARA 3 TIMES", `PERFORM -> OTHER-PARA reads 3
+`},
+	{"PERFORM OTHER-PARA VARYING WS-I FROM 1 BY 1 UNTIL WS-I > 5 AFTER WS-J FROM 1 BY 1 UNTIL WS-J > 3", `PERFORM [WS-I > 5 OR WS-J > 3] -> OTHER-PARA reads 1, 1, 1, 1 writes WS-I, WS-J
+`},
+	{"PERFORM OTHER-PARA THRU OTHER-EXIT UNTIL WS-DONE", `PERFORM [WS-DONE] -> OTHER-PARA THRU OTHER-EXIT
+`},
+	{"PERFORM WITH TEST AFTER UNTIL WS-I > 5 ADD 1 TO WS-I END-PERFORM", `PERFORM [WS-I > 5]
+  BODY
+    ADD reads 1, WS-I writes WS-I
+`},
+	{"IF WS-A IS GREATER THAN OR EQUAL TO WS-B DISPLAY 'GE' END-IF", `IF [WS-A >= WS-B]
+  THEN
+    DISPLAY reads 'GE'
+`},
+	{"IF WS-A NOT LESS THAN WS-B DISPLAY 'GE' END-IF", `IF [WS-A NOT < WS-B]
+  THEN
+    DISPLAY reads 'GE'
+`},
+	{"IF WS-A IS POSITIVE DISPLAY 'P' END-IF", `IF [WS-A IS POSITIVE]
+  THEN
+    DISPLAY reads 'P'
+`},
+	{"IF NOT (WS-A = 1 OR WS-B = 2) DISPLAY 'N' END-IF", `IF [NOT (WS-A = 1 OR WS-B = 2)]
+  THEN
+    DISPLAY reads 'N'
+`},
+	{"IF WS-A = 1 OR 2 OR 3 DISPLAY 'SMALL' END-IF", `IF [WS-A = 1 OR WS-A = 2 OR WS-A = 3]
+  THEN
+    DISPLAY reads 'SMALL'
+`},
+	{"IF WS-A IS NOT ALPHABETIC DISPLAY 'X' END-IF", `IF [WS-A IS NOT ALPHABETIC]
+  THEN
+    DISPLAY reads 'X'
+`},
+	{"INITIALIZE WS-REC REPLACING NUMERIC DATA BY 0", `INITIALIZE reads 0 writes WS-REC
+`},
+	{"ACCEPT WS-DATE FROM DATE YYYYMMDD", `ACCEPT device DATE writes WS-DATE
+`},
+	{"EVALUATE WS-A ALSO WS-B WHEN 1 THRU 5 ALSO ANY DISPLAY 'LOW' WHEN OTHER DISPLAY 'HIGH' END-EVALUATE", `EVALUATE reads WS-A, WS-B
+  WHEN [WS-A >= 1 AND WS-A <= 5]
+    DISPLAY reads 'LOW'
+  OTHER
+    DISPLAY reads 'HIGH'
+`},
+	{"GO TO OTHER-PARA OTHER-EXIT DEPENDING ON WS-N", `GO -> OTHER-PARA -> OTHER-EXIT reads WS-N
+`},
+	{"CALL 'SUB' USING BY REFERENCE WS-A BY CONTENT WS-B ON EXCEPTION DISPLAY 'NONE' END-CALL", `CALL calls SUB reads WS-A, WS-B writes WS-A
+  ON EXCEPTION
+    DISPLAY reads 'NONE'
+`},
+	{"MOVE CORRESPONDING WS-A TO WS-B", `MOVE reads WS-A writes WS-B
+`},
+	{"CONTINUE", `CONTINUE
+`},
+	{"GOBACK", `GOBACK
+`},
+	{"EXIT PROGRAM", `EXIT PROGRAM
+`},
+}
+
+func TestForms(t *testing.T) {
+	for _, form := range forms {
+		got, err := statementsOf(t, "    "+form.statement)
+		if err != nil {
+			t.Errorf("%s: %v", form.statement, err)
+		} else if got != form.want {
+			t.Errorf("%s:\ngot\n%s\nwant\n%s", form.statement, got, form.want)
+		}
+	}
+}

@@ -37,8 +37,8 @@ Packed decimal, display numbers, `COMP-1` and `COMP-2` are laid out alike in bot
 
 ## What it has been run against
 
-- **Two COBOL systems written for it**, in [Copal](../README.md), the project it was written in: a bank in IBM COBOL, fixed format and run by JCL, and a card processor in Micro Focus COBOL, free format and run by shell scripts. Every program of both is read and laid out, and both are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
-- **NIST's COBOL-85 test suite**, CCVS85: 383 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; in Copal, `make conformance` fetches the suite and writes the report again.
+- **Two COBOL systems written for it**, in [Copal](https://github.com/vlumi/copal), which reads COBOL batch systems with it: a bank in IBM COBOL, fixed format and run by JCL, and a card processor in Micro Focus COBOL, free format and run by shell scripts. Every program of both is read and laid out, and both are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
+- **NIST's COBOL-85 test suite**, CCVS85: 383 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
 - **Its own tests**: tables of statement forms and of data description entries, the latter laid out in both dialects, each with what it reads as or the error it stops with. They cover 86% of the statements of `cobol`, 90% of `layout`, and 93% of `record` and of `jcl`.
 
 ## What it does not read yet
@@ -59,4 +59,4 @@ The conformance report uses CCVS85, the COBOL-85 test suite of the National Inst
 
 ## License
 
-MIT, as Copal's: see [LICENSE](../LICENSE). Cobolith is a module of its own within Copal for now, and imports nothing of it; it is to move to a repository of its own once its API settles. The plan is in [Copal's docs](../docs/plans/library.md).
+MIT: see [LICENSE](LICENSE).

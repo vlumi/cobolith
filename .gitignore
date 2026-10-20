@@ -1,0 +1,7 @@
+# Downloaded test suites
+/.cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

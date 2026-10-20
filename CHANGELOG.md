@@ -4,6 +4,10 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- `SYNCHRONIZED`, in IBM COBOL: slack bytes before a synchronized binary, floating-point or index item, to a multiple of its alignment from the start of the record, and at the end of each occurrence of a table that holds one, as IBM documents them. `cobol.DataEntry` and `layout.Field` have `Synchronized`, and `cobol.Dialect` `Synchronizes`; in Micro Focus COBOL, whose compiler directives decide, it is an error. Of NIST's COBOL-85 suite, 399 programs of 459 are read, from 388.
+
 ## [0.3.0] - 2026-10-20
 
 ### Added

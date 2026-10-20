@@ -33,8 +33,11 @@ type DataEntry struct {
 	BlankWhenZero bool
 	External      bool
 	Global        bool
-	Comment       []string // the comment lines before the entry
-	Pos           Pos
+	// Synchronized is SYNCHRONIZED, LEFT or RIGHT: the item aligned on its
+	// natural boundary, as the dialect does it.
+	Synchronized bool
+	Comment      []string // the comment lines before the entry
+	Pos          Pos
 }
 
 // TableKey is a key of an OCCURS table, and whether it is descending.
@@ -125,6 +128,11 @@ func (e *DataEntry) parseClause(c *cursor) error {
 		}
 		e.BlankWhenZero = true
 	case clause.Is("IS") && (c.peek().Is("EXTERNAL") || c.peek().Is("GLOBAL")):
+	case clause.Is("SYNCHRONIZED") || clause.Is("SYNC"):
+		if !c.optional("LEFT") {
+			c.optional("RIGHT")
+		}
+		e.Synchronized = true
 	case clause.Is("EXTERNAL"):
 		e.External = true
 	case clause.Is("GLOBAL"):

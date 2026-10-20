@@ -107,7 +107,7 @@ func TestReadProgram(t *testing.T) {
 
 func TestParseDataEntryErrors(t *testing.T) {
 	tests := map[string]string{
-		"unsupported clause": "       01  X PIC X SYNC.",
+		"unsupported clause": "       01  X PIC X OCCURS 3 KEYED.",
 		"unsupported usage":  "       01  X USAGE POINTER.",
 		"no level":           "       X PIC X.",
 		"value without one":  "       01  X PIC X VALUE.",

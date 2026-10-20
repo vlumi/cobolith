@@ -129,13 +129,13 @@ type statementParser struct {
 	starts     []int
 }
 
-// ParseStatements parses a paragraph body into statements, sentence by
+// parseStatements parses a paragraph body into statements, sentence by
 // sentence. Procedures are the program's paragraph and section names,
 // which tell PERFORM name from an inline PERFORM; conditions are its
 // condition names (level 88), which tell IF A = B OR C, where C is the
 // object of an abbreviated relation, from IF A = B OR C with C a condition
 // name. A verb outside the subset the parser knows is an error.
-func ParseStatements(body []Token, procedures, conditions map[string]bool) ([]Statement, error) {
+func parseStatements(body []Token, procedures, conditions map[string]bool) ([]Statement, error) {
 	p := &statementParser{tokens: body, procedures: procedures, conditions: conditions}
 	var all []Statement
 	for !p.done() {

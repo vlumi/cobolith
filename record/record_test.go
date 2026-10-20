@@ -2,6 +2,7 @@ package record
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -152,5 +153,86 @@ func TestSigns(t *testing.T) {
 	r[0] = ' '
 	if _, err := l.Number(r, "SG-LEADING-SEPARATE"); err == nil {
 		t.Error("read a separate sign that is neither + nor -")
+	}
+}
+
+func binaryRecord(t *testing.T, dialect cobol.Dialect) *Layout {
+	t.Helper()
+	l, err := FromCopybook("testdata/BINARY.cpy", nil, "BINARY-RECORD", dialect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+// Binary numbers are big-endian, in two's complement when signed; native
+// binary is in the dialect's byte order, which Micro Focus COBOL leaves to
+// the platform.
+func TestBinary(t *testing.T) {
+	l := binaryRecord(t, cobol.IBM)
+	r := make([]byte, l.Length)
+	for name, value := range map[string]int64{"BN-SHORT": -2, "BN-COUNT": 123456789, "BN-NATIVE": -1} {
+		if err := l.SetNumber(r, name, value); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := l.Number(r, name); err != nil || n != value {
+			t.Errorf("%s: %d, %v, want %d", name, n, err, value)
+		}
+	}
+	if got, want := fmt.Sprintf("% X", r[:10]), "FF FE 07 5B CD 15 FF FF FF FF"; got != want {
+		t.Errorf("binary % X, want %s", r[:10], want)
+	}
+	for name, value := range map[string]int64{"BN-COUNT": -1, "BN-SHORT": 10000} {
+		if err := l.SetNumber(r, name, value); err == nil {
+			t.Errorf("%s: wrote %d", name, value)
+		}
+	}
+	mf := binaryRecord(t, cobol.MicroFocus)
+	r = make([]byte, mf.Length)
+	if err := mf.SetNumber(r, "BN-SHORT", -2); err != nil {
+		t.Error(err)
+	}
+	if _, err := mf.Number(r, "BN-NATIVE"); err == nil {
+		t.Error("read COMP-5 in Micro Focus COBOL, whose byte order is the platform's")
+	}
+}
+
+// IBM COBOL's floating point is hexadecimal: 1.0 is 41 10 00 00, -118.625
+// C2 76 A0 00; Micro Focus COBOL's is the platform's.
+func TestHexFloat(t *testing.T) {
+	l := binaryRecord(t, cobol.IBM)
+	r := make([]byte, l.Length)
+	at := map[string]int{"BN-SINGLE": 10, "BN-DOUBLE": 14}
+	for _, c := range []struct {
+		name  string
+		value float64
+		want  string
+	}{
+		{"BN-SINGLE", 1, "41 10 00 00"},
+		{"BN-SINGLE", -118.625, "C2 76 A0 00"},
+		{"BN-SINGLE", 0.1, "40 19 99 9A"},
+		{"BN-SINGLE", 0, "00 00 00 00"},
+		{"BN-DOUBLE", 1, "41 10 00 00 00 00 00 00"},
+	} {
+		if err := l.SetFloat(r, c.name, c.value); err != nil {
+			t.Fatal(err)
+		}
+		size := 4
+		if c.name == "BN-DOUBLE" {
+			size = 8
+		}
+		if got := fmt.Sprintf("% X", r[at[c.name]:at[c.name]+size]); got != c.want {
+			t.Errorf("%s %g: % X, want %s", c.name, c.value, got, c.want)
+		}
+		if f, err := l.Float(r, c.name); err != nil || math.Abs(f-c.value) > 1e-6*math.Abs(c.value) {
+			t.Errorf("%s: read %g, %v, want %g", c.name, f, err, c.value)
+		}
+	}
+	if _, err := l.Number(r, "BN-SINGLE"); err == nil {
+		t.Error("read a floating-point field as a number")
+	}
+	mf := binaryRecord(t, cobol.MicroFocus)
+	if _, err := mf.Float(make([]byte, mf.Length), "BN-SINGLE"); err == nil {
+		t.Error("read COMP-1 in Micro Focus COBOL, whose byte order is the platform's")
 	}
 }

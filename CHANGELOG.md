@@ -4,6 +4,15 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- `record` reads and writes binary fields, `COMP`, `COMP-4`, `BINARY` and `COMP-5`, through `Number` and `SetNumber`, and floating-point fields, `COMP-1` and `COMP-2`, through the new `Float` and `SetFloat`: IBM hexadecimal floating point in IBM COBOL.
+- `cobol.Dialect` says the byte order of native binary and IEEE floating point, `NativeOrder`, nil where it is the platform's, as in Micro Focus COBOL, and whether floating point is hexadecimal, `HexFloat`.
+
+### Changed
+
+- `record.New` takes the dialect the record is laid out in, which says how its binary and floating-point fields hold their values.
+
 ## [0.1.0] - 2026-10-20
 
 The first release, a library of its own.

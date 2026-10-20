@@ -1,6 +1,9 @@
 package cobol
 
-import "slices"
+import (
+	"encoding/binary"
+	"slices"
+)
 
 // Dialect is the COBOL a system is written in, by the compiler it was
 // written for: its name, short and as a reader knows it, and what the
@@ -14,14 +17,24 @@ type Dialect struct {
 	// IndexSize is the size, in bytes, of an item of USAGE INDEX; 0 where
 	// it depends on more than the dialect.
 	IndexSize int
+	// NativeOrder is the byte order of native binary, COMP-5, and of
+	// IEEE floating point; nil where it is the platform's. COMP, COMP-4
+	// and BINARY are big-endian in every dialect.
+	NativeOrder binary.ByteOrder
+	// HexFloat is whether COMP-1 and COMP-2 hold IBM hexadecimal floating
+	// point; otherwise they hold IEEE 754, in the native byte order.
+	HexFloat bool
 }
 
 var (
 	// IBM is an IBM compiler's COBOL: a binary item is a halfword, a
-	// fullword or a doubleword, and an index a fullword.
-	IBM = Dialect{Name: "ibm", Title: "IBM", BinarySizes: []int{2, 4, 8}, IndexSize: 4}
+	// fullword or a doubleword, and an index a fullword; native binary is
+	// big-endian, as the mainframe is, and floating point hexadecimal.
+	IBM = Dialect{Name: "ibm", Title: "IBM", BinarySizes: []int{2, 4, 8}, IndexSize: 4,
+		NativeOrder: binary.BigEndian, HexFloat: true}
 	// MicroFocus is Micro Focus COBOL: a binary item takes as many bytes
-	// as its digits need.
+	// as its digits need; native binary and floating point are in the
+	// byte order of the platform it runs on.
 	MicroFocus = Dialect{Name: "mf", Title: "Micro Focus", BinarySizes: []int{1, 2, 3, 4, 5, 6, 7, 8}}
 )
 

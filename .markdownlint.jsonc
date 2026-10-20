@@ -1,4 +1,6 @@
 {
   // One line per paragraph; the editor wraps.
   "MD013": false,
+  // Each release in the changelog has its own Added and Changed.
+  "MD024": { "siblings_only": true },
 }

@@ -19,7 +19,7 @@ records, err := layout.Program(p, cobol.IBM)
 | --- | --- |
 | [cobol/](cobol/) | Source in fixed format, or free after `>>SOURCE FORMAT IS FREE`; `COPY` with `REPLACING`, by words, qualified names, literals or pseudo-text; the divisions, file control and file descriptions, data description entries, and the statements of the procedure division, every token with the file and line it came from. A file of several programs, one after the other, with `ParseAll`, and programs nested in one. |
 | [layout/](layout/) | Record layouts from data description entries, in a dialect: each field's position, length, picture, usage and category, `OCCURS` with `DEPENDING ON`, `REDEFINES`, `SIGN`, and condition names. |
-| [record/](record/) | The fields of a record by name, through its layout: text, display numbers with their overpunched signs, and packed decimal. |
+| [record/](record/) | The fields of a record by name, through its layout: text, display numbers with their overpunched signs, packed decimal, binary, and floating point. |
 | [jcl/](jcl/) | Jobs, their steps and DD statements: datasets with generations, temporary datasets, concatenations, `SYSOUT`, `DUMMY`, in-stream data, `COND` tests and dispositions. |
 
 Each package has an example that runs as a test.
@@ -32,8 +32,10 @@ COBOL leaves some of a record's layout to the compiler, and a `cobol.Dialect` sa
 | --- | --- | --- |
 | Binary items: `COMP`, `COMP-4`, `COMP-5`, `BINARY` | a halfword, fullword or doubleword: 2, 4 or 8 bytes | as many bytes as the digits need, 1 to 8 |
 | `USAGE INDEX` | 4 bytes | an error: its size depends on more than the dialect |
+| Native binary, `COMP-5` | big-endian | the platform's byte order: an error in `record` |
+| Floating point, `COMP-1` and `COMP-2` | IBM hexadecimal floating point | IEEE 754 in the platform's byte order: an error in `record` |
 
-Packed decimal, display numbers, `COMP-1` and `COMP-2` are laid out alike in both.
+Packed decimal and display numbers are laid out alike in both, and so are `COMP-1` and `COMP-2`, four and eight bytes, and binary's big-endian order.
 
 ## What it has been run against
 
@@ -47,7 +49,6 @@ Each is an error that says so, with the file and line:
 
 - `SYNCHRONIZED`, whose slack bytes depend on the compiler and, in a table, on each occurrence; and `USAGE POINTER`, whose size depends on the platform.
 - `RENAMES`, level 66, and `PIC N`, national characters.
-- In `record`, the values of binary and floating-point fields, which `layout` lays out.
 - `REPLACE`, and `DECIMAL-POINT IS COMMA`.
 - A paragraph name repeated in another section: a reference by name alone would find the wrong one.
 - The report writer, the communication module, and debugging declaratives, `USE FOR DEBUGGING`.

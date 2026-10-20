@@ -588,3 +588,86 @@ func TestParagraphsOfSections(t *testing.T) {
 		t.Error("parsed PERFORM STEP, which two other sections have")
 	}
 }
+
+// SPECIAL-NAMES may make the comma the decimal point and name the
+// currency sign: the program's pictures and literals are read as written
+// and kept in the standard form.
+func TestSpecialNames(t *testing.T) {
+	source := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. EUROPE.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+           CURRENCY SIGN IS "E"
+           DECIMAL-POINT IS COMMA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  PRICE   PIC 9(5)V99 VALUE 1234,50.
+       01  SHOWN   PIC EE.EEE.EE9,99.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           IF PRICE > 1000,5 MOVE PRICE TO SHOWN END-IF
+           STOP RUN.
+`
+	tokens, err := Lex("EUROPE.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("EUROPE.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	price, shown := p.WorkingStorage[0], p.WorkingStorage[1]
+	if !p.DecimalPointComma || p.CurrencySign != "E" || price.Values[0] != "1234.50" || shown.Picture != "$$,$$$,$$9.99" {
+		t.Errorf("comma %v, sign %q, value %q, picture %q", p.DecimalPointComma, p.CurrencySign, price.Values[0], shown.Picture)
+	}
+	if got := p.Paragraphs[0].Statements[0].Condition.String(); got != "PRICE > 1000.5" {
+		t.Errorf("condition %q", got)
+	}
+}
+
+// A debugging declarative is kept apart from those for file errors, and
+// names no file.
+func TestDebuggingDeclarative(t *testing.T) {
+	source := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. DEBUGGED.
+       PROCEDURE DIVISION.
+       DECLARATIVES.
+       WATCH SECTION.
+           USE FOR DEBUGGING ON ALL PROCEDURES.
+       WATCH-PARA.
+           DISPLAY DEBUG-NAME.
+       END DECLARATIVES.
+       MAIN SECTION.
+       MAIN-PARA.
+           STOP RUN.
+`
+	tokens, err := Lex("DEBUGGED.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("DEBUGGED.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Declaratives) != 1 || !p.Declaratives[0].Debugging || len(p.Declaratives[0].Files) != 0 {
+		t.Errorf("declaratives %+v", p.Declaratives)
+	}
+}
+
+// A VALUE may be a literal that reads like a clause word.
+func TestValueLikeAClause(t *testing.T) {
+	e, err := ParseDataEntry(mustLex(t, `       01  D PICTURE X(7) VALUE "PICTURE".`))
+	if err != nil || len(e.Values) != 1 || e.Values[0] != `'PICTURE'` {
+		t.Errorf("entry %+v, %v", e, err)
+	}
+}
+
+func mustLex(t *testing.T, source string) []Token {
+	t.Helper()
+	tokens, err := Lex("test", []byte(source+"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tokens[:len(tokens)-1]
+}

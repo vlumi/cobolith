@@ -36,8 +36,11 @@ type DataEntry struct {
 	// Synchronized is SYNCHRONIZED, LEFT or RIGHT: the item aligned on its
 	// natural boundary, as the dialect does it.
 	Synchronized bool
-	Comment      []string // the comment lines before the entry
-	Pos          Pos
+	// Renames and RenamesThru are a level-66 entry's RENAMES: the field it
+	// renames, or the first and last of the fields it renames together.
+	Renames, RenamesThru string
+	Comment              []string // the comment lines before the entry
+	Pos                  Pos
 }
 
 // TableKey is a key of an OCCURS table, and whether it is descending.
@@ -75,7 +78,7 @@ func ParseDataEntry(tokens []Token) (*DataEntry, error) {
 		return nil, err
 	}
 	entry := &DataEntry{Level: level, Name: "FILLER", Comment: tokens[0].Comment, Pos: tokens[0].Pos}
-	if t := c.peek(); t.Kind == Word && !isClause(t.Text) {
+	if t := c.peek(); t.Kind == Word && !isClause(t) {
 		entry.Name = c.next().Text
 	}
 	for !c.done() {
@@ -86,13 +89,18 @@ func ParseDataEntry(tokens []Token) (*DataEntry, error) {
 	return entry, nil
 }
 
-func isClause(word string) bool {
-	switch word {
+// isClause reports whether a token is a word that starts a clause of a data
+// description entry; a literal of that text is not.
+func isClause(t Token) bool {
+	if t.Kind != Word {
+		return false
+	}
+	switch t.Text {
 	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES", "SIGN", "LEADING", "TRAILING",
-		"ASCENDING", "DESCENDING", "INDEXED", "JUSTIFIED", "JUST", "BLANK", "EXTERNAL", "GLOBAL", "SYNCHRONIZED", "SYNC":
+		"ASCENDING", "DESCENDING", "INDEXED", "JUSTIFIED", "JUST", "BLANK", "EXTERNAL", "GLOBAL", "SYNCHRONIZED", "SYNC", "RENAMES":
 		return true
 	}
-	_, isUsage := usages[word]
+	_, isUsage := usages[t.Text]
 	return isUsage
 }
 
@@ -133,6 +141,11 @@ func (e *DataEntry) parseClause(c *cursor) error {
 			c.optional("RIGHT")
 		}
 		e.Synchronized = true
+	case clause.Is("RENAMES"):
+		e.Renames = c.qualified()
+		if c.optional("THRU") || c.optional("THROUGH") {
+			e.RenamesThru = c.qualified()
+		}
 	case clause.Is("EXTERNAL"):
 		e.External = true
 	case clause.Is("GLOBAL"):
@@ -176,13 +189,13 @@ func (e *DataEntry) parseOccurs(c *cursor) error {
 		descending := c.next().Is("DESCENDING")
 		c.optional("KEY")
 		c.optional("IS")
-		for !c.done() && !isClause(c.peek().Text) {
+		for !c.done() && !isClause(c.peek()) {
 			e.Keys = append(e.Keys, TableKey{Name: c.next().Text, Descending: descending})
 		}
 	}
 	if c.optional("INDEXED") {
 		c.optional("BY")
-		for !c.done() && !isClause(c.peek().Text) {
+		for !c.done() && !isClause(c.peek()) {
 			e.IndexedBy = append(e.IndexedBy, c.next().Text)
 		}
 		if len(e.IndexedBy) == 0 {
@@ -210,7 +223,7 @@ func (e *DataEntry) parseSign(c *cursor, position Token) error {
 func (e *DataEntry) parseValues(c *cursor) error {
 	c.optional("IS")
 	c.optional("ARE")
-	for !c.done() && !isClause(c.peek().Text) {
+	for !c.done() && !isClause(c.peek()) {
 		value, err := literal(c)
 		if err != nil {
 			return err

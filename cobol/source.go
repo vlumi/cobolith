@@ -256,7 +256,7 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 		if len(l.tokens) == 0 || l.tokens[len(l.tokens)-1].Kind != Word {
 			return fmt.Errorf("%s: continuation line continues nothing", pos)
 		}
-		end := wordEnd(body, start, false)
+		end := wordEnd(body, start, l.continuesPicture())
 		l.tokens[len(l.tokens)-1].Text += strings.ToUpper(string(body[start:end]))
 		l.scan(pos, body, end)
 		return nil
@@ -266,6 +266,15 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 	}
 	l.scan(pos, body, start+1)
 	return nil
+}
+
+// continuesPicture reports whether the word a continuation line continues
+// is a picture string: the word after PIC or PICTURE [IS], which may hold
+// parentheses.
+func (l *lexer) continuesPicture() bool {
+	n := len(l.tokens)
+	before := func(i int) bool { return i >= 0 && (l.tokens[i].Is("PIC") || l.tokens[i].Is("PICTURE")) }
+	return before(n-2) || n >= 3 && l.tokens[n-2].Is("IS") && before(n-3)
 }
 
 // decimalPoint makes a period the decimal point of the number before it,

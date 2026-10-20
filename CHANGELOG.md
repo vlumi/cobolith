@@ -4,6 +4,21 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- `REPLACE`, which replaces text in the source after it until `REPLACE OFF`, as `COPY REPLACING` does; and a `REPLACING` operand with a subscript.
+- SPECIAL-NAMES' `DECIMAL-POINT IS COMMA` and `CURRENCY SIGN`, in `cobol.Program` as `DecimalPointComma` and `CurrencySign`: the program's pictures and numeric literals are read as written and kept in the standard form, the decimal point a period and the currency symbol `$`.
+- `RENAMES`, level 66: a field over the bytes of the fields it renames, after the record's own fields, with `Renames` and `RenamesThru` on the entry.
+- `USE FOR DEBUGGING` declaratives, `Debugging` on `cobol.Declarative`, which name no file and run no file's error procedure.
+- Abbreviated combined relations with their operator, `A > 1 AND < 9`, with `IS` and `NOT`; an arithmetic expression in parentheses as a relation's side; `EVALUATE` of a condition, of a condition name, and of `FALSE`, whose objects are conditions taken as their opposites.
+- `PERFORM` with a subscripted count, `TEST BEFORE` without `WITH`; `SORT` and `MERGE` with `DUPLICATES IN ORDER` and `COLLATING SEQUENCE`; `STOP` with a figurative constant; `RECORD VARYING DEPENDING` with no lengths; a picture continued across lines.
+- Of NIST's COBOL-85 suite, 433 programs of 459 are read, from 399. What stops the rest is the communication module and the report writer, the suite's X-card placeholders where a literal must stand, a picture of `P` alone, and a literal continued across lines with a quote at the margin.
+
+### Fixed
+
+- A `VALUE` whose literal reads like a clause word, `VALUE "PICTURE"`, is a value.
+- A paragraph name that `COPY REPLACING` replaces is still a header.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added

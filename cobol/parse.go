@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Program is a parsed COBOL program: what the analysis needs from each
@@ -21,6 +22,12 @@ type Program struct {
 	Linkage    []*DataEntry
 	Using      []string
 	Paragraphs []Paragraph
+	// DecimalPointComma is SPECIAL-NAMES' DECIMAL-POINT IS COMMA, and
+	// CurrencySign its CURRENCY SIGN. The program's pictures and numeric
+	// literals are read as written with them, and kept in the standard
+	// form: the decimal point a period, the currency symbol $.
+	DecimalPointComma bool
+	CurrencySign      string
 	// Declaratives are the sections of the DECLARATIVES, whose
 	// paragraphs come first among the paragraphs.
 	Declaratives []Declarative
@@ -32,12 +39,15 @@ type Program struct {
 // Declarative is a section of the DECLARATIVES: what its USE sentence
 // says it is for, the files named or every file opened in one of the
 // modes named. The runtime runs it when an input or output statement on
-// one of them fails, and control goes on after that statement.
+// one of them fails, and control goes on after that statement. A
+// Debugging one, USE FOR DEBUGGING, runs as the debugger's hook instead,
+// and names no file.
 type Declarative struct {
-	Section string
-	Files   []string
-	Modes   []string
-	Pos     Pos
+	Section   string
+	Files     []string
+	Modes     []string
+	Debugging bool
+	Pos       Pos
 }
 
 // IdentificationEntry is an identification paragraph with a comment entry,
@@ -181,19 +191,17 @@ func parseProgram(path string, tokens, own []Token, nested [][]Token) (*Program,
 	if len(tokens) > 0 {
 		p.Comment = tokens[0].Comment
 	}
-	steps := []struct {
-		division string
-		parse    func([]Token) error
-	}{
-		{"IDENTIFICATION", p.parseIdentification},
-		{"ENVIRONMENT", p.parseEnvironment},
-		{"DATA", p.parseData},
-		{"PROCEDURE", p.parseProcedure},
+	if err := p.parseIdentification(divisions["IDENTIFICATION"]); err != nil {
+		return nil, err
 	}
-	for _, step := range steps {
-		if err := step.parse(divisions[step.division]); err != nil {
-			return nil, err
-		}
+	if err := p.parseEnvironment(divisions["ENVIRONMENT"]); err != nil {
+		return nil, err
+	}
+	if err := p.parseData(p.standardized(divisions["DATA"])); err != nil {
+		return nil, err
+	}
+	if err := p.parseProcedure(p.standardized(divisions["PROCEDURE"])); err != nil {
+		return nil, err
 	}
 	if p.ID == "" {
 		return nil, fmt.Errorf("%s: no PROGRAM-ID", path)
@@ -334,15 +342,81 @@ func (p *Program) parseIdentification(tokens []Token) error {
 
 func (p *Program) parseEnvironment(tokens []Token) error {
 	for _, entry := range entries(tokens) {
-		if entry[0].Is("SELECT") {
+		switch {
+		case entry[0].Is("SELECT"):
 			file, err := parseSelect(entry)
 			if err != nil {
 				return err
 			}
 			p.Files = append(p.Files, file)
+		default:
+			p.specialNames(entry)
 		}
 	}
 	return nil
+}
+
+// specialNames reads the clauses of a SPECIAL-NAMES entry that change how
+// the program is written: DECIMAL-POINT IS COMMA, and CURRENCY [SIGN]
+// [IS] literal.
+func (p *Program) specialNames(entry []Token) {
+	for i, t := range entry {
+		rest := entry[i+1:]
+		for len(rest) > 0 && (rest[0].Is("IS") || rest[0].Is("SIGN")) {
+			rest = rest[1:]
+		}
+		switch {
+		case len(rest) == 0:
+		case t.Is("DECIMAL-POINT") && rest[0].Is("COMMA"):
+			p.DecimalPointComma = true
+		case t.Is("CURRENCY") && rest[0].Kind == String:
+			p.CurrencySign = rest[0].Text
+		}
+	}
+}
+
+// standardized gives the data and procedure divisions' tokens their
+// standard form, where SPECIAL-NAMES changed it: a numeric literal's comma
+// becomes a period, and in a picture, periods and commas swap and the
+// currency sign becomes $.
+func (p *Program) standardized(tokens []Token) []Token {
+	if !p.DecimalPointComma && p.CurrencySign == "" {
+		return tokens
+	}
+	out := slices.Clone(tokens)
+	picture := false
+	for i := range out {
+		t := &out[i]
+		switch {
+		case t.Kind != Word:
+		case t.Is("PIC") || t.Is("PICTURE"):
+			picture = true
+			continue
+		case picture && t.Is("IS"):
+			continue
+		case picture:
+			if p.DecimalPointComma {
+				t.Text = strings.Map(swapPoint, t.Text)
+			}
+			if p.CurrencySign != "" {
+				t.Text = strings.ReplaceAll(t.Text, p.CurrencySign, "$")
+			}
+		case p.DecimalPointComma && isNumber(strings.Replace(t.Text, ",", ".", 1)) && strings.Contains(t.Text, ","):
+			t.Text = strings.Replace(t.Text, ",", ".", 1)
+		}
+		picture = false
+	}
+	return out
+}
+
+func swapPoint(r rune) rune {
+	switch r {
+	case '.':
+		return ','
+	case ',':
+		return '.'
+	}
+	return r
 }
 
 // parseSelect parses SELECT [OPTIONAL] name ASSIGN [TO] target and the
@@ -498,6 +572,11 @@ func (fd *FileDescription) parseRecordClause(c *cursor) error {
 		c.optional(word)
 	}
 	if c.done() || fdClauses[c.peek().Text] {
+		return nil
+	}
+	if c.optional("DEPENDING") {
+		c.optional("ON")
+		fd.LengthIn = c.next().Text
 		return nil
 	}
 	var err error
@@ -702,7 +781,8 @@ func (s *splitter) paragraph(name string, header Token) {
 
 // use reads the USE sentence that starts a section of the DECLARATIVES:
 // USE [GLOBAL] AFTER [STANDARD] EXCEPTION|ERROR PROCEDURE [ON] followed by
-// file names or open modes.
+// file names or open modes, or USE FOR DEBUGGING ON the procedures or
+// items it watches, which are not kept.
 func (s *splitter) use(tokens []Token, i int) (int, error) {
 	at := tokens[i].Pos
 	if !s.declarative {
@@ -716,9 +796,12 @@ func (s *splitter) use(tokens []Token, i int) (int, error) {
 		case "INPUT", "OUTPUT", "I-O", "EXTEND":
 			d.Modes = append(d.Modes, t.Text)
 		case "FOR", "DEBUGGING":
-			return 0, fmt.Errorf("%s: USE FOR DEBUGGING is not supported yet", at)
+			d.Debugging = true
+		case "ALL", "PROCEDURES", "REFERENCES", "OF":
 		default:
-			d.Files = append(d.Files, t.Text)
+			if !d.Debugging {
+				d.Files = append(d.Files, t.Text)
+			}
 		}
 	}
 	s.program.Declaratives = append(s.program.Declaratives, d)

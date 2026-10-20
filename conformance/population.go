@@ -34,7 +34,7 @@ func readPopulation(r io.Reader) ([]member, error) {
 		switch {
 		case strings.HasPrefix(line, "*HEADER,"):
 			fields := strings.Split(line, ",")
-			members = append(members, member{kind: fields[1], name: fields[len(fields)-1]})
+			members = append(members, member{kind: fields[1], name: strings.Fields(fields[len(fields)-1])[0]})
 			current = &members[len(members)-1]
 		case strings.HasPrefix(line, "*END-OF,"):
 			current = nil

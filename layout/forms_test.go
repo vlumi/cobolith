@@ -139,7 +139,12 @@ var dataForms = []struct{ entries, ibm, mf string }{
 01 S 1+1 group DISPLAY
 05 B 1+1 alphanumeric DISPLAY
 `, ""},
-	{"01 R.\n 05 A PIC X(2).\n 05 B PIC X(3).\n66 AB RENAMES A THRU B.", "error: FORMS.cbl:9: AB: RENAMES is not supported yet", ""},
+	{"01 R.\n 05 A PIC X(2).\n 05 B PIC 9(3).\n66 AB RENAMES A THRU B.\n66 BB RENAMES B.", `01 R 1+5 group DISPLAY
+05 A 1+2 alphanumeric DISPLAY
+05 B 3+3 numeric DISPLAY
+66 AB 1+5 group DISPLAY
+66 BB 3+3 numeric DISPLAY
+`, ""},
 	{"01 R.\n 05 A PIC N(3).\n 05 B PIC X(3) USAGE DISPLAY.\n 05 C PIC 9(3) PACKED-DECIMAL.", "error: FORMS.cbl:7: A: PIC N(3): symbol N is not supported yet", ""},
 }
 

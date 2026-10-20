@@ -23,6 +23,10 @@ var CopybookExtensions = []string{".cpy", ".CPY", ".cbl"}
 // occur in sequence. A word tagged with colons, such as ==:P:==, also
 // replaces the tag inside words: with REPLACING ==:P:== BY ==WS==, the
 // copybook's :P:-COUNT becomes WS-COUNT.
+//
+// A REPLACE statement in the program replaces text the same way in all
+// the source after it, copybooks expanded, until REPLACE OFF or the next
+// REPLACE.
 func Read(path string, copybookDirs []string) ([]Token, error) {
 	return read(path, copybookDirs, nil)
 }
@@ -60,7 +64,10 @@ func read(path string, copybookDirs []string, including []string) ([]Token, erro
 		expanded = append(expanded, replace(copied, replacements)...)
 		i = end
 	}
-	return expanded, nil
+	if including != nil {
+		return expanded, nil
+	}
+	return applyReplace(expanded)
 }
 
 // replacement is one pair of a COPY's REPLACING phrase.
@@ -83,29 +90,71 @@ func parseCopy(tokens []Token, i int) (string, []replacement, int, error) {
 	}
 	var replacements []replacement
 	if j < len(tokens) && tokens[j].Is("REPLACING") {
-		j++
-		for j < len(tokens) && tokens[j].Kind != Period {
-			var r replacement
-			var err error
-			if r.from, j, err = operand(tokens, j); err != nil {
-				return "", nil, 0, err
-			}
-			if j >= len(tokens) || !tokens[j].Is("BY") {
-				return "", nil, 0, fmt.Errorf("%s: COPY %s REPLACING without BY", pos, name)
-			}
-			if r.to, j, err = operand(tokens, j+1); err != nil {
-				return "", nil, 0, err
-			}
-			if len(r.from) == 0 {
-				return "", nil, 0, fmt.Errorf("%s: COPY %s REPLACING empty text", pos, name)
-			}
-			replacements = append(replacements, r)
+		var err error
+		if replacements, j, err = parseReplacements(tokens, j+1, "COPY "+name+" REPLACING"); err != nil {
+			return "", nil, 0, err
 		}
 	}
 	if j >= len(tokens) || tokens[j].Kind != Period {
 		return "", nil, 0, fmt.Errorf("%s: COPY %s does not end with a period", pos, name)
 	}
 	return name, replacements, j, nil
+}
+
+// parseReplacements reads the pairs of a REPLACING phrase or a REPLACE
+// statement, from BY to ..., starting at tokens[j], up to the period, and
+// returns them and the period's index.
+func parseReplacements(tokens []Token, j int, what string) ([]replacement, int, error) {
+	pos := tokens[j-1].Pos
+	var replacements []replacement
+	for j < len(tokens) && tokens[j].Kind != Period {
+		var r replacement
+		var err error
+		if r.from, j, err = operand(tokens, j); err != nil {
+			return nil, 0, err
+		}
+		if j >= len(tokens) || !tokens[j].Is("BY") {
+			return nil, 0, fmt.Errorf("%s: %s without BY", pos, what)
+		}
+		if r.to, j, err = operand(tokens, j+1); err != nil {
+			return nil, 0, err
+		}
+		if len(r.from) == 0 {
+			return nil, 0, fmt.Errorf("%s: %s empty text", pos, what)
+		}
+		replacements = append(replacements, r)
+	}
+	return replacements, j, nil
+}
+
+// applyReplace applies each REPLACE statement among the tokens to those
+// after it, up to the next: REPLACE ==from== BY ==to== ..., as COPY
+// REPLACING replaces, until REPLACE OFF. The statements themselves are
+// left out.
+func applyReplace(tokens []Token) ([]Token, error) {
+	var out []Token
+	var active []replacement
+	start := 0
+	for i := 0; i < len(tokens); i++ {
+		if !tokens[i].Is("REPLACE") || i+1 >= len(tokens) || !tokens[i+1].Is("OFF") && !strings.HasPrefix(tokens[i+1].Text, "==") {
+			continue
+		}
+		out = append(out, replace(tokens[start:i], active)...)
+		j := i + 1
+		if tokens[j].Is("OFF") {
+			active, j = nil, j+1
+		} else {
+			var err error
+			if active, j, err = parseReplacements(tokens, j, "REPLACE"); err != nil {
+				return nil, err
+			}
+		}
+		if j >= len(tokens) || tokens[j].Kind != Period {
+			return nil, fmt.Errorf("%s: REPLACE does not end with a period", tokens[i].Pos)
+		}
+		start, i = j+1, j
+	}
+	return append(out, replace(tokens[start:], active)...), nil
 }
 
 // operand reads one operand of a REPLACING phrase starting at tokens[j]: a
@@ -121,6 +170,21 @@ func operand(tokens []Token, j int) ([]Token, int, error) {
 		end := j + 1
 		for first.Kind == Word && end+1 < len(tokens) && (tokens[end].Is("OF") || tokens[end].Is("IN")) {
 			end += 2
+		}
+		if first.Kind == Word && end < len(tokens) && tokens[end].Kind == LParen {
+			depth := 0
+			for ; end < len(tokens); end++ {
+				switch tokens[end].Kind {
+				case LParen:
+					depth++
+				case RParen:
+					depth--
+				}
+				if depth == 0 {
+					end++
+					break
+				}
+			}
 		}
 		return tokens[j:end], end, nil
 	}
@@ -146,7 +210,8 @@ func operand(tokens []Token, j int) ([]Token, int, error) {
 
 // replace applies the replacements to copied tokens, each token replaced at
 // most once: whole sequences of tokens first, then colon tags inside words.
-// Replacing tokens take the position of the text they replace.
+// Replacing tokens take the position of the text they replace, and its
+// place in area A, so that a paragraph name replaced is still a header.
 func replace(tokens []Token, replacements []replacement) []Token {
 	if len(replacements) == 0 {
 		return tokens
@@ -155,7 +220,7 @@ func replace(tokens []Token, replacements []replacement) []Token {
 	for i := 0; i < len(tokens); {
 		if r, ok := matching(tokens[i:], replacements); ok {
 			for _, t := range r.to {
-				t.Pos, t.Comment = tokens[i].Pos, tokens[i].Comment
+				t.Pos, t.Comment, t.AreaA = tokens[i].Pos, tokens[i].Comment, tokens[i].AreaA
 				out = append(out, t)
 			}
 			i += len(r.from)

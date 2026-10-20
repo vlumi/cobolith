@@ -164,7 +164,7 @@ func TestIndexedAndCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	statements, err := ParseStatements(tokens, nil, nil)
+	statements, err := parseStatements(tokens, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestConditionNames(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		statements, err := ParseStatements(tokens, nil, conditions)
+		statements, err := parseStatements(tokens, nil, conditions)
 		if err != nil {
 			t.Errorf("%s: %v", source, err)
 			continue
@@ -242,7 +242,7 @@ func TestStatementErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ParseStatements(tokens, procedures, nil); err == nil {
+		if _, err := parseStatements(tokens, procedures, nil); err == nil {
 			t.Errorf("%s: parsed without error", source)
 		}
 	}
@@ -263,7 +263,7 @@ func TestNestedPhrases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	statements, err := ParseStatements(tokens, nil, nil)
+	statements, err := parseStatements(tokens, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

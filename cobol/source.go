@@ -1,7 +1,10 @@
 // Package cobol reads COBOL source, in fixed format or, after a
 // >>SOURCE FORMAT IS FREE directive, in free format: it splits the lines
 // into tokens that keep their position in the original file, expands COPY
-// statements, and parses a program's divisions.
+// statements, and parses a program's divisions. It reads IBM and Micro
+// Focus COBOL, whose differences that matter to a record's layout its
+// Dialect says, and the statements of a subset of the language: a verb
+// outside it is an error, never a guess.
 package cobol
 
 import (

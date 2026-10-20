@@ -435,7 +435,7 @@ func (p *Program) parseProcedure(tokens []Token) error {
 	}
 	addConditionNames(conditions, p.WorkingStorage)
 	for i := range p.Paragraphs {
-		statements, err := ParseStatements(p.Paragraphs[i].Body, s.procedures, conditions)
+		statements, err := parseStatements(p.Paragraphs[i].Body, s.procedures, conditions)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.Paragraphs[i].Name, err)
 		}

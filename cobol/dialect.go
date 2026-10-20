@@ -22,7 +22,7 @@ var (
 	MicroFocus = Dialect{Name: "mf", Title: "Micro Focus", BinarySizes: []int{1, 2, 3, 4, 5, 6, 7, 8}}
 )
 
-// Dialects are the dialects bedrock knows, by name.
+// Dialects are the dialects the library reads.
 var Dialects = []Dialect{IBM, MicroFocus}
 
 // DialectNamed finds a dialect by its name.

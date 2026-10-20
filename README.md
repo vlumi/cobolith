@@ -7,4 +7,6 @@ A Go library for reading COBOL: source and copybooks, the records they lay out, 
 - [record/](record/): reading and writing the fields of a record through its layout, including packed decimal and the overpunched signs of display numbers.
 - [jcl/](jcl/): jobs, steps and DD statements from job files, with generations, temporary datasets and concatenations.
 
+[conformance/](conformance/README.md) reports how much of NIST's COBOL-85 test suite, CCVS85, it reads, by module, and why the rest stops. The suite is the work of the National Institute of Standards and Technology, in the public domain; `make conformance` fetches it, and it is not redistributed here.
+
 It is a module of its own within Copal for now, and imports nothing of it; it is to move to a repository of its own once its API settles. The plan is in [Copal's docs](../docs/plans/library.md).

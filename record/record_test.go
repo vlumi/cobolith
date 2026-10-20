@@ -236,3 +236,21 @@ func TestHexFloat(t *testing.T) {
 		t.Error("read COMP-1 in Micro Focus COBOL, whose byte order is the platform's")
 	}
 }
+
+// Fujitsu NetCOBOL's native binary is little-endian.
+func TestFujitsuNativeBinary(t *testing.T) {
+	l, err := FromCopybook("testdata/BINARY.cpy", nil, "BINARY-RECORD", cobol.Fujitsu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := make([]byte, l.Length)
+	if err := l.SetNumber(r, "BN-NATIVE", 258); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("% X", r[6:10]); got != "02 01 00 00" {
+		t.Errorf("COMP-5 258 is % X, want 02 01 00 00", r[6:10])
+	}
+	if n, err := l.Number(r, "BN-NATIVE"); err != nil || n != 258 {
+		t.Errorf("read %d, %v", n, err)
+	}
+}

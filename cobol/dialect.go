@@ -56,8 +56,22 @@ var (
 var Hitachi = Dialect{Name: "hitachi", Title: "Hitachi", BinarySizes: []int{2, 4, 8},
 	Encoding: ShiftJIS, NationalSize: 2}
 
+// Fujitsu is Fujitsu NetCOBOL on Windows or Linux, with ENCODE(SJIS):
+// source and data in Shift_JIS, a national item two bytes a character;
+// a binary item a halfword, fullword or doubleword, native binary
+// little-endian, floating point in IEEE; and SYNCHRONIZED as in IBM COBOL.
+// Its index items, four bytes or eight by the platform, are not read.
+var Fujitsu = Dialect{Name: "fujitsu", Title: "Fujitsu", BinarySizes: []int{2, 4, 8},
+	NativeOrder: binary.LittleEndian, Synchronizes: true, Encoding: ShiftJIS, NationalSize: 2}
+
+// FujitsuUnicode is Fujitsu NetCOBOL with ENCODE(UTF8), its default in a
+// Unicode locale: source and alphanumeric data in UTF-8, and a national
+// item in UTF-16, two bytes a character. ENCODE(UTF8,UTF32) is not read.
+var FujitsuUnicode = Dialect{Name: "fujitsu-unicode", Title: "Fujitsu Unicode", BinarySizes: []int{2, 4, 8},
+	NativeOrder: binary.LittleEndian, Synchronizes: true, NationalSize: 2}
+
 // Dialects are the dialects the library reads.
-var Dialects = []Dialect{IBM, MicroFocus, Hitachi}
+var Dialects = []Dialect{IBM, MicroFocus, Hitachi, Fujitsu, FujitsuUnicode}
 
 // ShiftJIS is the Encoding of the Japanese compilers' sources.
 const ShiftJIS = "Shift_JIS"

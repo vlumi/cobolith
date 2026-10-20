@@ -120,7 +120,13 @@ type Paragraph struct {
 
 // ReadProgram reads and parses a program, expanding its copybooks.
 func ReadProgram(path string, copybookDirs []string) (*Program, error) {
-	tokens, err := Read(path, copybookDirs)
+	return ReadProgramIn(path, copybookDirs, Dialect{})
+}
+
+// ReadProgramIn reads and parses a program written in a dialect, whose
+// encoding the source is read in.
+func ReadProgramIn(path string, copybookDirs []string, d Dialect) (*Program, error) {
+	tokens, err := ReadIn(path, copybookDirs, d.Encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +147,13 @@ func Parse(path string, tokens []Token) (*Program, error) {
 // copybooks expanded: those it holds one after the other, each ended by
 // END PROGRAM, each with the programs nested in it.
 func ReadPrograms(path string, copybookDirs []string) ([]*Program, error) {
-	tokens, err := Read(path, copybookDirs)
+	return ReadProgramsIn(path, copybookDirs, Dialect{})
+}
+
+// ReadProgramsIn reads and parses every program of a source file written
+// in a dialect.
+func ReadProgramsIn(path string, copybookDirs []string, d Dialect) ([]*Program, error) {
+	tokens, err := ReadIn(path, copybookDirs, d.Encoding)
 	if err != nil {
 		return nil, err
 	}

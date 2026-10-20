@@ -45,9 +45,13 @@ const (
 	// CommentEntry is the free text of an identification paragraph such as
 	// AUTHOR or DATE-WRITTEN, which the compiler treats as a comment.
 	CommentEntry
-	// Hex is a hexadecimal literal, X'0D25': its hex digits, without the X
-	// and the quotes.
+	// Hex is a hexadecimal literal, X'0D25', or a national one, NX'93FA':
+	// its hex digits, without the prefix and the quotes.
 	Hex
+	// National is a national literal, N'...' or NC'...', of the Japanese
+	// compilers: its characters as the source holds them, without the
+	// prefix and the quotes.
+	National
 )
 
 // commentEntryParagraphs are the identification paragraphs whose text is a
@@ -76,16 +80,18 @@ func (t Token) String() string {
 		return "'" + t.Text + "'"
 	case Hex:
 		return "X'" + t.Text + "'"
+	case National:
+		return "N'" + t.Text + "'"
 	case Period:
 		return "."
 	}
 	return t.Text
 }
 
-// isLiteral reports whether the token is a quoted literal, of characters
-// or of hex digits.
+// isLiteral reports whether the token is a quoted literal: of characters,
+// of hex digits, or national.
 func (t Token) isLiteral() bool {
-	return t.Kind == String || t.Kind == Hex
+	return t.Kind == String || t.Kind == Hex || t.Kind == National
 }
 
 // Is reports whether the token is the given word.
@@ -100,7 +106,13 @@ func (t Token) Is(word string) bool {
 // continues after the quote that opens the continuation line, anything else
 // continues at the line's first non-blank character.
 func Lex(file string, source []byte) ([]Token, error) {
-	l := &lexer{file: file}
+	return LexIn(file, source, "")
+}
+
+// LexIn lexes source in an encoding, Shift_JIS or none: in Shift_JIS, a
+// two-byte character is kept whole, its second byte not upper-cased.
+func LexIn(file string, source []byte, encoding string) ([]Token, error) {
+	l := &lexer{file: file, encoding: encoding}
 	for i, text := range strings.Split(string(source), "\n") {
 		if err := l.line(i+1, strings.TrimRight(text, "\r")); err != nil {
 			return nil, err
@@ -114,7 +126,8 @@ func Lex(file string, source []byte) ([]Token, error) {
 }
 
 type lexer struct {
-	file string
+	file     string
+	encoding string
 	// free is set by a >>SOURCE FORMAT IS FREE directive: lines have no
 	// sequence area, indicator or right margin, and *> starts a comment.
 	free   bool
@@ -257,7 +270,7 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 			return fmt.Errorf("%s: continuation line continues nothing", pos)
 		}
 		end := wordEnd(body, start, l.continuesPicture())
-		l.tokens[len(l.tokens)-1].Text += strings.ToUpper(string(body[start:end]))
+		l.tokens[len(l.tokens)-1].Text += l.upper(body[start:end])
 		l.scan(pos, body, end)
 		return nil
 	}
@@ -266,6 +279,28 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 	}
 	l.scan(pos, body, start+1)
 	return nil
+}
+
+func isQuote(c byte) bool { return c == '\'' || c == '"' }
+
+// upper writes a word with its ASCII letters in upper case, as COBOL is
+// case-insensitive, and its other bytes as they are: in Shift_JIS, the
+// second byte of a two-byte character may be an ASCII letter's.
+func (l *lexer) upper(word []byte) string {
+	out := make([]byte, len(word))
+	for i := 0; i < len(word); i++ {
+		c := word[i]
+		switch {
+		case l.encoding == ShiftJIS && leadsShiftJIS(c) && i+1 < len(word):
+			out[i], out[i+1] = c, word[i+1]
+			i++
+		case c >= 'a' && c <= 'z':
+			out[i] = c - 'a' + 'A'
+		default:
+			out[i] = c
+		}
+	}
+	return string(out)
 }
 
 // continuesPicture reports whether the word a continuation line continues
@@ -325,13 +360,25 @@ func (l *lexer) scan(pos Pos, body []byte, i int) {
 				}
 			}
 			i++
-		case (c == 'X' || c == 'x') && i+1 < len(body) && (body[i+1] == '\'' || body[i+1] == '"'):
+		case (c == 'X' || c == 'x') && i+1 < len(body) && isQuote(body[i+1]):
 			l.open = &Token{Kind: Hex, Pos: pos}
 			l.quote = body[i+1]
 			i = l.literal(body, i+2)
+		case (c == 'N' || c == 'n') && i+1 < len(body) && isQuote(body[i+1]):
+			l.open = &Token{Kind: National, Pos: pos}
+			l.quote = body[i+1]
+			i = l.literal(body, i+2)
+		case (c == 'N' || c == 'n') && i+2 < len(body) && isQuote(body[i+2]) && (body[i+1] == 'C' || body[i+1] == 'c' || body[i+1] == 'X' || body[i+1] == 'x'):
+			kind := National
+			if body[i+1] == 'X' || body[i+1] == 'x' {
+				kind = Hex
+			}
+			l.open = &Token{Kind: kind, Pos: pos}
+			l.quote = body[i+2]
+			i = l.literal(body, i+3)
 		default:
 			end := wordEnd(body, i, l.picture)
-			l.emit(Token{Kind: Word, Text: strings.ToUpper(string(body[i:end])), Pos: pos})
+			l.emit(Token{Kind: Word, Text: l.upper(body[i:end]), Pos: pos})
 			i = end
 		}
 	}
@@ -351,7 +398,7 @@ func (l *lexer) literal(body []byte, i int) int {
 	for i < len(body) {
 		if body[i] == l.quote {
 			if i+1 < len(body) && body[i+1] == l.quote {
-				l.open.Text += string(l.quote)
+				l.open.Text += string(body[i : i+1])
 				i += 2
 				continue
 			}
@@ -359,7 +406,7 @@ func (l *lexer) literal(body []byte, i int) int {
 			l.open = nil
 			return i + 1
 		}
-		l.open.Text += string(body[i])
+		l.open.Text += string(body[i : i+1])
 		i++
 	}
 	l.open.Text += strings.Repeat(" ", lastColumn-indicatorColumn-len(body))

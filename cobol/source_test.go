@@ -216,3 +216,31 @@ func TestContinuedPicture(t *testing.T) {
 		t.Errorf("picture %q", got)
 	}
 }
+
+// In Shift_JIS, a two-byte character stays whole and its second byte is
+// not upper-cased, though it may be an ASCII letter's; and N, NC and NX
+// literals are national.
+func TestShiftJIS(t *testing.T) {
+	source := "       01  \x8a\x61-\x93\xfa PIC N(2) VALUE N\"\x93\xfa\x96\x7b\".\n" +
+		"           MOVE NC\"\x93\xfa\" TO A\n           MOVE NX\"93FA\" TO B\n"
+	tokens, err := LexIn("test", []byte(source), ShiftJIS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, tok := range tokens {
+		got = append(got, fmt.Sprintf("%d:%s", tok.Kind, tok.Text))
+	}
+	want := []string{"0:01", "0:\x8a\x61-\x93\xfa", "0:PIC", "0:N(2)", "0:VALUE", "7:\x93\xfa\x96\x7b", "2:.",
+		"0:MOVE", "7:\x93\xfa", "0:TO", "0:A", "0:MOVE", "6:93FA", "0:TO", "0:B"}
+	if !slices.Equal(got, want) {
+		t.Errorf("tokens\n%q\nwant\n%q", got, want)
+	}
+	ascii, err := Lex("test", []byte("       MOVE \x8a\x61 TO B\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ascii[1].Text != "\x8a\x41" {
+		t.Errorf("without an encoding, the word is %q, want its ASCII letter upper-cased", ascii[1].Text)
+	}
+}

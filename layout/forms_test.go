@@ -145,7 +145,7 @@ var dataForms = []struct{ entries, ibm, mf string }{
 66 AB 1+5 group DISPLAY
 66 BB 3+3 numeric DISPLAY
 `, ""},
-	{"01 R.\n 05 A PIC N(3).\n 05 B PIC X(3) USAGE DISPLAY.\n 05 C PIC 9(3) PACKED-DECIMAL.", "error: FORMS.cbl:7: A: PIC N(3): symbol N is not supported yet", ""},
+	{"01 R.\n 05 A PIC N(3).\n 05 B PIC X(3) USAGE DISPLAY.\n 05 C PIC 9(3) PACKED-DECIMAL.", "error: FORMS.cbl:7: A: the size of a national item in IBM COBOL is not known", "error: FORMS.cbl:7: A: the size of a national item in Micro Focus COBOL is not known"},
 }
 
 func TestDataForms(t *testing.T) {

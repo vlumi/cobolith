@@ -4,6 +4,16 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
+### Added
+
+- Hitachi COBOL2002, `cobol.Hitachi`, the first Japanese dialect: source and data in Shift_JIS, read two bytes at a time by `LexIn`, `ReadIn`, `ReadProgramIn` and `ReadProgramsIn`, which take the dialect or its encoding; Japanese names stay whole and are not upper-cased in their second bytes. National literals, `N"..."`, `NC"..."` and `NX"..."`, a token kind of their own, `National`. National items, `PIC N` and `USAGE NATIONAL`, and national-edited ones, `PIC NBN`, laid out at the dialect's `NationalSize` bytes a character: two in Hitachi COBOL2002, and an error where it is not known. `cobol.Dialect` has `Encoding` and `NationalSize`.
+
+### Fixed
+
+- A literal's bytes above 0x7F were encoded as UTF-8 when the literal was read, so an `X'...'` literal was right but a quoted one of such bytes was not.
+
 ## [0.5.0] - 2026-10-20
 
 ### Added
@@ -57,7 +67,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/vlumi/cobolith/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vlumi/cobolith/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vlumi/cobolith/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/vlumi/cobolith/compare/v0.2.0...v0.3.0

@@ -2,6 +2,9 @@ package layout
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -148,4 +151,45 @@ func TestMicroFocusClauses(t *testing.T) {
 	if strings.Join(got, "; ") != want {
 		t.Errorf("got  %s\nwant %s", strings.Join(got, "; "), want)
 	}
+}
+
+// A national item takes the dialect's bytes a character, two in Hitachi
+// COBOL2002, and is an error in a dialect whose size is not known; a
+// national-edited one has N and B.
+func TestNationalItems(t *testing.T) {
+	source := "       01  R.\n           05  A PIC N(3).\n           05  B PIC NBN USAGE NATIONAL.\n           05  C PIC X.\n"
+	entries := entriesOf(t, source)
+	records, err := Records(entries, cobol.Hitachi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range records[0].Children {
+		got = append(got, fmt.Sprintf("%s %d+%d %s", f.Name, f.Start, f.Length, f.Category))
+	}
+	if want := []string{"A 1+6 national", "B 7+6 national-edited", "C 13+1 alphanumeric"}; !slices.Equal(got, want) {
+		t.Errorf("fields %q, want %q", got, want)
+	}
+	if _, err := Records(entries, cobol.IBM); err == nil {
+		t.Error("laid out a national item in IBM COBOL, whose size is not read yet")
+	}
+	for _, bad := range []string{"       01  X PIC N9.\n", "       01  Y PIC X USAGE NATIONAL.\n"} {
+		if _, err := Records(entriesOf(t, bad), cobol.Hitachi); err == nil {
+			t.Errorf("laid out %s", bad)
+		}
+	}
+}
+
+// entriesOf reads data description entries written as a copybook.
+func entriesOf(t *testing.T, source string) []*cobol.DataEntry {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ENTRIES.cpy")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := cobol.ReadDataEntries(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entries
 }

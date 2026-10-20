@@ -14,6 +14,8 @@ const (
 	AlphanumericEdited = "alphanumeric-edited"
 	Numeric            = "numeric"
 	NumericEdited      = "numeric-edited"
+	National           = "national"
+	NationalEdited     = "national-edited"
 	Index              = "index"
 	Group              = "group"
 )
@@ -28,7 +30,9 @@ type picture struct {
 }
 
 // parsePicture analyzes a picture string such as S9(7)V99, X(20) or
-// Z,ZZ9.99-. A scaling position P takes no storage: before the digits, it
+// Z,ZZ9.99-; or N(10), a national item, whose positions are characters
+// of two bytes or more, and NBN, a national-edited one, whose B is a
+// national space. A scaling position P takes no storage: before the digits, it
 // puts the decimal point to its left, a digit more after it, as PPP99
 // holds .00012; after them, a ten more, as 99PPP holds 12000.
 func parsePicture(s string) (picture, error) {
@@ -37,7 +41,7 @@ func parsePicture(s string) (picture, error) {
 		return picture{}, err
 	}
 	var p picture
-	alpha, edited, decimal := false, false, false
+	alpha, edited, decimal, national := false, false, false, false
 	for i := 0; i < len(symbols); i++ {
 		switch c := symbols[i]; c {
 		case 'S':
@@ -63,6 +67,9 @@ func parsePicture(s string) (picture, error) {
 		case 'X', 'A':
 			p.positions++
 			alpha = true
+		case 'N':
+			p.positions++
+			national = true
 		case 'Z', '*', '+', '-', '.', ',', 'B', '0', '/', '$':
 			p.positions++
 			edited = true
@@ -78,6 +85,14 @@ func parsePicture(s string) (picture, error) {
 		}
 	}
 	switch {
+	case national && (alpha || p.digits > 0 || p.signed || decimal):
+		return picture{}, fmt.Errorf("PIC %s: N with other than N and B", s)
+	case national && strings.Trim(symbols, "NB") != "":
+		return picture{}, fmt.Errorf("PIC %s: N with other than N and B", s)
+	case national && edited:
+		p.category = NationalEdited
+	case national:
+		p.category = National
 	case alpha && edited:
 		p.category = AlphanumericEdited
 	case alpha:
@@ -120,7 +135,16 @@ func expandPicture(s string) (string, error) {
 // given usage, in the dialect.
 func storageSize(p picture, usage string, dialect cobol.Dialect) (int, error) {
 	switch usage {
-	case "DISPLAY":
+	case "DISPLAY", "NATIONAL":
+		if p.category == National || p.category == NationalEdited {
+			if dialect.NationalSize == 0 {
+				return 0, fmt.Errorf("the size of a national item in %s COBOL is not known", dialect.Title)
+			}
+			return p.positions * dialect.NationalSize, nil
+		}
+		if usage == "NATIONAL" {
+			return 0, fmt.Errorf("USAGE NATIONAL needs a picture of N")
+		}
 		return p.positions, nil
 	case "COMP-3":
 		if p.category != Numeric {

@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### Added
 
 - `record` reads and writes binary fields, `COMP`, `COMP-4`, `BINARY` and `COMP-5`, through `Number` and `SetNumber`, and floating-point fields, `COMP-1` and `COMP-2`, through the new `Float` and `SetFloat`: IBM hexadecimal floating point in IBM COBOL.
@@ -26,5 +28,6 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vlumi/cobolith/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vlumi/cobolith/releases/tag/v0.1.0

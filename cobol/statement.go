@@ -343,9 +343,12 @@ func (p *statementParser) operand() (Operand, error) {
 		return op, nil
 	case t.Kind != Word || verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION"):
 		return Operand{}, fmt.Errorf("expected an operand, found %s", t)
+	case t.Is("ALL") && p.peek().Kind == RParen:
+		return op, nil
 	case t.Is("ALL"):
 		rest, err := p.operand()
 		op.Text += " " + rest.Text
+		op.Refs = rest.Refs
 		return op, err
 	case isNumber(t.Text) || figurative[t.Text]:
 		return op, nil
@@ -483,6 +486,7 @@ func (p *statementParser) move(s *Statement) error {
 // the operands after TO, FROM, BY or INTO are both read and written; with
 // it, they are read and the GIVING operands written.
 func (p *statementParser) arithmetic(s *Statement) error {
+	p.optional("CORRESPONDING", "CORR")
 	reads, err := p.operands()
 	if err != nil {
 		return err
@@ -1077,7 +1081,9 @@ func (p *statementParser) search(s *Statement) error {
 	return nil
 }
 
-// files parses OPEN and CLOSE: the files, with OPEN's modes.
+// files parses OPEN and CLOSE: the files, with OPEN's modes, and the
+// phrases about reels and locks, REVERSED, NO REWIND, REEL, UNIT and WITH
+// LOCK, passed over.
 func (p *statementParser) files(s *Statement) {
 	mode := ""
 	for {
@@ -1085,6 +1091,7 @@ func (p *statementParser) files(s *Statement) {
 		switch {
 		case t.Kind == Word && slices.Contains([]string{"INPUT", "OUTPUT", "EXTEND", "I-O"}, t.Text):
 			mode = p.next().Text
+		case p.optional("WITH", "REEL", "UNIT", "FOR", "NO", "LOCK", "REWIND", "REMOVAL", "REVERSED"):
 		case t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t):
 			s.Files = append(s.Files, FileRef{Name: p.next().Text, Mode: mode})
 		default:

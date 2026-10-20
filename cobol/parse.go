@@ -373,6 +373,9 @@ func parseSelect(entry []Token) (FileControl, error) {
 			}
 			c.optional("IS")
 			file.Status = c.next().Text
+			if c.optional("OF") || c.optional("IN") {
+				c.next()
+			}
 		default:
 			return FileControl{}, fmt.Errorf("%s: SELECT %s: %s is not supported yet", clause.Pos, file.Name, clause)
 		}
@@ -451,10 +454,14 @@ func (c *cursor) passClause() {
 	}
 }
 
-// parseRecordClause parses the rest of a RECORD clause, after RECORD.
+// parseRecordClause parses the rest of a RECORD clause, after RECORD: no
+// lengths at all, for RECORD IS VARYING alone.
 func (fd *FileDescription) parseRecordClause(c *cursor) error {
 	for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
 		c.optional(word)
+	}
+	if c.done() || fdClauses[c.peek().Text] {
+		return nil
 	}
 	var err error
 	if fd.MinLength, err = c.number(); err != nil {
@@ -667,6 +674,9 @@ func (c *cursor) expect(word string) error {
 }
 
 func (c *cursor) number() (int, error) {
+	if c.done() {
+		return 0, fmt.Errorf("%s: expected a number, found the end of the entry", c.tokens[len(c.tokens)-1].Pos)
+	}
 	t := c.next()
 	n, err := strconv.Atoi(t.Text)
 	if t.Kind != Word || err != nil {

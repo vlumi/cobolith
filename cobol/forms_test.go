@@ -174,6 +174,12 @@ var forms = []struct{ statement, want string }{
 `},
 	{"CONTINUE", `CONTINUE
 `},
+	{"COMPUTE WS-N = FUNCTION MAX(WS-T(ALL))", `COMPUTE reads FUNCTION MAX(WS-T(ALL)) writes WS-N
+`},
+	{"CLOSE IN-FILE WITH LOCK OUT-FILE WITH NO REWIND", `CLOSE file IN-FILE file OUT-FILE
+`},
+	{"ADD CORRESPONDING WS-A TO WS-B", `ADD reads WS-A, WS-B writes WS-B
+`},
 	{"READ IN-FILE RECORD END MOVE 1 TO WS-EOF NOT END ADD 1 TO WS-N END-READ", `READ file IN-FILE
   AT END
     MOVE reads 1 writes WS-EOF

@@ -442,7 +442,7 @@ func TestFileClauses(t *testing.T) {
                ALTERNATE RECORD KEY IS MS-NAME WITH DUPLICATES
                ALTERNATE KEY MS-CODE
                RESERVE 2 AREAS
-               STATUS IS MS-STATUS.
+               STATUS IS MS-STATUS OF MS-STATUSES.
            SELECT SLOTS ASSIGN TO SLOTSDD
                ORGANIZATION RELATIVE
                RELATIVE SL-NUMBER
@@ -461,10 +461,11 @@ func TestFileClauses(t *testing.T) {
            05  MS-NAME PIC X(10).
            05  MS-CODE PIC X(6).
        FD  SLOTS LINAGE IS 60 LINES WITH FOOTING AT 55
-           CODE-SET IS ASCII IS EXTERNAL.
+           CODE-SET IS ASCII IS EXTERNAL RECORD IS VARYING.
        01  SL-RECORD PIC X(80).
        WORKING-STORAGE SECTION.
-       01  MS-STATUS PIC XX.
+       01  MS-STATUSES.
+           05  MS-STATUS PIC XX.
        01  SL-NUMBER PIC 9(4).
        PROCEDURE DIVISION.
        MAIN-PARA.

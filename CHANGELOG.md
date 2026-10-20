@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Added
 
 - `SYNCHRONIZED`, in IBM COBOL: slack bytes before a synchronized binary, floating-point or index item, to a multiple of its alignment from the start of the record, and at the end of each occurrence of a table that holds one, as IBM documents them. `cobol.DataEntry` and `layout.Field` have `Synchronized`, and `cobol.Dialect` `Synchronizes`; in Micro Focus COBOL, whose compiler directives decide, it is an error. Of NIST's COBOL-85 suite, 399 programs of 459 are read, from 388.
@@ -38,7 +40,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/vlumi/cobolith/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/vlumi/cobolith/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/vlumi/cobolith/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vlumi/cobolith/releases/tag/v0.1.0

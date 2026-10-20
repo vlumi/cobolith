@@ -7,7 +7,7 @@ It is pre-production, below 1.0 and not yet tagged: what it reads, it reads care
 ```go
 p, err := cobol.ReadProgram("ACCTUPD.cbl", []string{"copybooks"})
 if err != nil {
-	log.Fatal(err) // file:line: what was not read
+    log.Fatal(err) // file:line: what was not read
 }
 records, err := layout.Program(p, cobol.IBM)
 // each field of records.WorkingStorage: name, start, length, picture, usage

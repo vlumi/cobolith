@@ -1,6 +1,6 @@
 # Conformance: NIST's COBOL-85 test suite
 
-Cobolith reads 296 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
+Cobolith reads 306 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
 
 The suite was created by NIST employees and is in the public domain; cobolith's tests use it with that acknowledgment, and do not redistribute it. `make conformance` fetches it from the Internet Archive's copy of NIST's address, checks it against the hash GNU Guix pins it by, and writes this report. Its programs are prepared as the suite's own program, EXEC85, prepares them with no control cards: the optional code a letter in column 7 flags is kept for the options it selects by default, A, E, H, L, T and Y, and made a comment for the rest. Its X-cards, the implementor's names it would substitute for XXXXXnnn, are left as written: most stand where any name may.
 
@@ -12,7 +12,7 @@ The suite was created by NIST employees and is in the public domain; cobolith's 
 | IC, Inter-program communication | 47 | 30 |
 | IF, Intrinsic functions | 45 | 33 |
 | IX, Indexed I-O | 42 | 36 |
-| NC, Nucleus | 95 | 45 |
+| NC, Nucleus | 95 | 55 |
 | OB, Obsolete elements | 9 | 4 |
 | RL, Relative I-O | 35 | 32 |
 | RW, Report writer | 6 | 0 |
@@ -29,7 +29,6 @@ Each program stops at its first error. The reasons, most common first, with the 
 | --- | --- |
 | `SYNCHRONIZED is not supported yet` | NC105A, NC106A, NC107A, NC108M, NC118A, NC119A, NC175A, NC176A, NC177A, NC201A, NC211A, NC250A, OBNC2M |
 | `USE FOR DEBUGGING is not supported yet` | DB101A, DB102A, DB103M, DB104A, DB105A, DB201A, DB202A, DB203A, DB204A, DB301M, DB302M, DB303M, DB305M |
-| `symbol P is not supported yet` | IX110A, NC101A, NC104A, NC111A, NC114M, NC117A, NC120A, NC124A, NC134A, NC170A, NC171A, NC172A, NC173A |
 | `expected an operand, found )` | IF119A, IF120A, IF121A, IF122A, IF123A, IF128A, IF129A, IF132A, IF137A, IF138A, IF141A, IF402M |
 | `USAGE INDEX is not supported yet` | IC106A, IC107A, IC207A, IC208A, NC131A, NC133A, NC135A, NC206A, NC236A |
 | `unexpected WITH` | IX204A, IX401M, OBSQ3A, OBSQ5A, RL401M, SQ211A, SQ215A, ST140A                                                    TES00010 |
@@ -39,6 +38,7 @@ Each program stops at its first error. The reasons, most common first, with the 
 | `CANCEL is not supported yet` | IC203A, IC205A, IC210A, IC215A |
 | `expected a number, found RD` | RW101A, RW102A, RW103A, RW104A |
 | `ALTER is not supported yet` | NC302M, NC303M, OBNC1M |
+| `SIGN on a group is not supported yet` | NC116A, NC117A, NC120A |
 | `SORT-PARA is not supported yet` | SG104A, SG105A, SG106A |
 | `SYNC is not supported yet` | NC138A, NC203A, NC251A |
 | `expected a literal, found XXXXX081` | NC103A, NC174A, NC254A |
@@ -62,7 +62,6 @@ Each program stops at its first error. The reasons, most common first, with the 
 | `REPLACE is not supported yet` | SM401M |
 | `SECT-IC219-0001 is not supported yet` | OBIC2A |
 | `SECT-SG-01-001 is not supported yet` | SG101A |
-| `SIGN on a group is not supported yet` | NC116A |
 | `SRT-1 is not supported yet` | SG204A |
 | `TABLE5-NUM is not supported yet` | NC121M |
 | `XXXXX086 is not supported yet` | SQ401M |
@@ -81,5 +80,6 @@ Each program stops at its first error. The reasons, most common first, with the 
 | `expected a number, found DATA` | ST123A |
 | `expected a number, found DEPENDING` | SQ221A |
 | `expected a number, found REPLACE` | SM208A |
+| `no character positions` | IX110A |
 | `unexpected IN` | ST127A |
 | `unexpected NUMERIC` | NC225A |

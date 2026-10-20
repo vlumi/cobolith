@@ -30,7 +30,7 @@ func TestParsePicture(t *testing.T) {
 }
 
 func TestParsePictureErrors(t *testing.T) {
-	for _, pic := range []string{"9S9", "9(0)", "(3)", "X(3", "99P", "9RD", "V"} {
+	for _, pic := range []string{"9S9", "9(0)", "(3)", "X(3", "99Q", "9RD", "V"} {
 		if _, err := parsePicture(pic); err == nil {
 			t.Errorf("PIC %s parsed without error", pic)
 		}
@@ -63,5 +63,23 @@ func TestStorageSize(t *testing.T) {
 	}
 	if _, err := storageSize(picture{positions: 3, category: Alphanumeric}, "COMP-3", cobol.IBM); err == nil {
 		t.Error("COMP-3 accepted an alphanumeric picture")
+	}
+}
+
+// A scaling position P takes no storage, and moves the decimal point.
+func TestScalingPositions(t *testing.T) {
+	for _, c := range []struct {
+		picture                  string
+		positions, digits, scale int
+	}{
+		{"99PPP", 2, 2, -3},
+		{"PPP99", 2, 2, 5},
+		{"SVPP9(3)", 3, 3, 5},
+		{"9(3)P(2)", 3, 3, -2},
+	} {
+		p, err := parsePicture(c.picture)
+		if err != nil || p.positions != c.positions || p.digits != c.digits || p.scale != c.scale {
+			t.Errorf("PIC %s: %+v, %v, want %d positions, %d digits, scale %d", c.picture, p, err, c.positions, c.digits, c.scale)
+		}
 	}
 }

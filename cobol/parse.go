@@ -550,7 +550,7 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		}
 		tokens = tokens[i:]
 	}
-	s := &splitter{program: p, procedures: map[string]bool{}}
+	s := &splitter{program: p, procedures: map[string]bool{}, paragraphs: map[string]map[string]bool{}}
 	for i := 0; i < len(tokens); i++ {
 		taken, err := s.take(tokens, i)
 		if err != nil {
@@ -570,7 +570,63 @@ func (p *Program) parseProcedure(tokens []Token) error {
 		}
 		p.Paragraphs[i].Statements = statements
 	}
+	return p.resolveProcedures()
+}
+
+// resolveProcedures gives each reference to a paragraph by its name alone
+// the section of the paragraph it names: that of the referring paragraph's
+// own section, if the section has one by the name, or else the only one.
+// A name more than one section has, and the referring one not, is an
+// error: it needs OF and its section.
+func (p *Program) resolveProcedures() error {
+	sections := map[string]bool{}
+	in := map[string][]string{} // a paragraph name, and the sections that have one by it
+	for _, para := range p.Paragraphs {
+		sections[para.Section] = para.Section != ""
+		if para.Name != "" && para.Name != para.Section {
+			in[para.Name] = append(in[para.Name], para.Section)
+		}
+	}
+	resolve := func(name, section, own string, at Pos) (string, error) {
+		switch candidates := in[name]; {
+		case section != "" || sections[name] || len(candidates) == 0:
+			return section, nil
+		case len(candidates) == 1:
+			return candidates[0], nil
+		case slices.Contains(candidates, own):
+			return own, nil
+		}
+		return "", fmt.Errorf("%s: %s is a paragraph of more than one section, none of them this one: name its section with OF", at, name)
+	}
+	for i := range p.Paragraphs {
+		para := &p.Paragraphs[i]
+		var err error
+		eachStatement(para.Statements, func(s *Statement) {
+			for j := range s.Procedures {
+				ref := &s.Procedures[j]
+				if err == nil {
+					ref.Section, err = resolve(ref.Name, ref.Section, para.Section, s.Pos)
+				}
+				if err == nil && ref.Thru != "" {
+					ref.ThruSection, err = resolve(ref.Thru, ref.ThruSection, para.Section, s.Pos)
+				}
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// eachStatement visits statements and those nested in them, in place.
+func eachStatement(statements []Statement, visit func(*Statement)) {
+	for i := range statements {
+		visit(&statements[i])
+		for _, b := range statements[i].Branches {
+			eachStatement(b.Statements, visit)
+		}
+	}
 }
 
 // splitter splits the procedure division into paragraphs. A header is a
@@ -580,8 +636,11 @@ func (p *Program) parseProcedure(tokens []Token) error {
 // paragraph named after the section. The DECLARATIVES come first, each
 // section of them starting with its USE sentence.
 type splitter struct {
-	program     *Program
-	procedures  map[string]bool
+	program    *Program
+	procedures map[string]bool
+	// paragraphs are the names of each section's paragraphs, which need
+	// be unique only within it.
+	paragraphs  map[string]map[string]bool
 	section     string
 	header      *Token // a section's header, until its first statement or paragraph
 	declarative bool
@@ -610,9 +669,13 @@ func (s *splitter) take(tokens []Token, i int) (int, error) {
 		s.procedures[t.Text] = true
 		return 3, nil
 	case i+1 < len(tokens) && tokens[i+1].Kind == Period:
-		if s.procedures[t.Text] {
-			return 0, fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
+		if s.paragraphs[s.section][t.Text] {
+			return 0, fmt.Errorf("%s: a second paragraph named %s in the same section", t.Pos, t.Text)
 		}
+		if s.paragraphs[s.section] == nil {
+			s.paragraphs[s.section] = map[string]bool{}
+		}
+		s.paragraphs[s.section][t.Text] = true
 		s.paragraph(t.Text, t)
 		s.procedures[t.Text] = true
 		return 1, nil

@@ -50,10 +50,14 @@ type FileRef struct {
 
 // ProcedureRef names a procedure a statement transfers control to: a
 // PERFORM's paragraph or THRU range, a GO TO's target, a SORT's input or
-// output procedure.
+// output procedure. Section and ThruSection are the sections of the
+// paragraphs Name and Thru name: as written after OF or IN, or as the
+// program resolves a name alone, to the paragraph of its own section by
+// that name, or the only one; empty for a section's name, and for a
+// paragraph in no section.
 type ProcedureRef struct {
-	Name string
-	Thru string
+	Name, Section     string
+	Thru, ThruSection string
 }
 
 // Branch is a list of statements nested in another statement, run under a
@@ -933,11 +937,7 @@ func (p *statementParser) perform(s *Statement) error {
 	t := p.peek()
 	outOfLine := t.Kind == Word && p.procedures[t.Text]
 	if outOfLine {
-		ref := ProcedureRef{Name: p.next().Text}
-		if p.optional("THRU", "THROUGH") {
-			ref.Thru = p.next().Text
-		}
-		s.Procedures = []ProcedureRef{ref}
+		s.Procedures = []ProcedureRef{p.procedureRange()}
 	}
 	if err := p.performPhrase(s); err != nil {
 		return err
@@ -1039,10 +1039,32 @@ func (p *statementParser) until(s *Statement) error {
 	return err
 }
 
+// procedure parses a procedure name, and the section after OF or IN that
+// qualifies it.
+func (p *statementParser) procedure() ProcedureRef {
+	ref := ProcedureRef{Name: p.next().Text}
+	if t := p.at(p.i + 1); (p.peek().Is("OF") || p.peek().Is("IN")) && p.procedures[t.Text] {
+		p.next()
+		ref.Section = p.next().Text
+	}
+	return ref
+}
+
+// procedureRange parses a procedure name, and THRU another, each qualified
+// or not.
+func (p *statementParser) procedureRange() ProcedureRef {
+	ref := p.procedure()
+	if p.optional("THRU", "THROUGH") {
+		thru := p.procedure()
+		ref.Thru, ref.ThruSection = thru.Name, thru.Section
+	}
+	return ref
+}
+
 func (p *statementParser) goTo(s *Statement) error {
 	p.optional("TO")
 	for t := p.peek(); t.Kind == Word && p.procedures[t.Text]; t = p.peek() {
-		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
+		s.Procedures = append(s.Procedures, p.procedure())
 	}
 	if len(s.Procedures) == 0 {
 		return nil
@@ -1063,7 +1085,7 @@ func (p *statementParser) goTo(s *Statement) error {
 // the pairs, in order.
 func (p *statementParser) alter(s *Statement) error {
 	for t := p.peek(); t.Kind == Word && p.procedures[t.Text]; t = p.peek() {
-		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
+		s.Procedures = append(s.Procedures, p.procedure())
 		if err := p.expect("TO"); err != nil {
 			return err
 		}
@@ -1072,10 +1094,10 @@ func (p *statementParser) alter(s *Statement) error {
 				return err
 			}
 		}
-		if t := p.next(); !p.procedures[t.Text] {
+		if t := p.peek(); !p.procedures[t.Text] {
 			return fmt.Errorf("ALTER to %s, no paragraph", t)
 		}
-		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.tokens[p.i-1].Text})
+		s.Procedures = append(s.Procedures, p.procedure())
 	}
 	if len(s.Procedures) == 0 {
 		return fmt.Errorf("ALTER names no paragraph")
@@ -1276,11 +1298,7 @@ func (p *statementParser) sort(s *Statement) error {
 				return err
 			}
 			p.optional("IS")
-			ref := ProcedureRef{Name: p.next().Text}
-			if p.optional("THRU", "THROUGH") {
-				ref.Thru = p.next().Text
-			}
-			s.Procedures = append(s.Procedures, ref)
+			s.Procedures = append(s.Procedures, p.procedureRange())
 		case p.optional(phrase.files):
 			for t := p.peek(); t.Kind == Word && !verbs[t.Text] && !keywords[t.Text]; t = p.peek() {
 				s.Files = append(s.Files, FileRef{Name: p.next().Text, Mode: phrase.mode})

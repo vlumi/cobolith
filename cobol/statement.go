@@ -120,7 +120,7 @@ var keywords = map[string]bool{
 	"REPLACING": true, "TALLYING": true, "CONVERTING": true, "DELIMITER": true, "COUNT": true,
 	"CHARACTERS": true, "LEADING": true, "FIRST": true, "INITIAL": true, "FOR": true, "DATA": true,
 	"ALPHANUMERIC": true, "ALPHANUMERIC-EDITED": true, "NUMERIC-EDITED": true, "NATIONAL": true,
-	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true, "VALUE": true,
+	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true, "VALUE": true, "COLLATING": true,
 	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
@@ -270,7 +270,7 @@ func (p *statementParser) statement() (Statement, error) {
 	case "SORT", "MERGE":
 		err = p.sort(&s)
 	case "STOP":
-		if t := p.peek(); t.isLiteral() || t.Kind == Word && isNumber(t.Text) {
+		if t := p.peek(); t.isLiteral() || t.Kind == Word && (isNumber(t.Text) || figurative[t.Text]) {
 			// STOP literal shows the literal and waits for the operator; the run
 			// goes on, so it is not STOP RUN's verb.
 			s.Verb = "STOP LITERAL"
@@ -835,21 +835,43 @@ func (p *statementParser) ifStatement(s *Statement) error {
 	return nil
 }
 
+// subject is one subject of an EVALUATE: an expression its objects are
+// compared with; a condition written out, whose objects are TRUE or FALSE;
+// or TRUE or FALSE, whose objects are conditions, each taken as it is or,
+// after FALSE, as its opposite.
+type subject struct {
+	value     *Operand
+	condition *Condition
+	negated   bool
+}
+
 // evaluate parses EVALUATE, turning each WHEN into the condition under
 // which it runs: its objects matched against the subjects, ALSO as AND,
 // stacked WHENs as OR.
 func (p *statementParser) evaluate(s *Statement) error {
-	var subjects []*Operand
+	var subjects []subject
 	for {
-		if p.optional("TRUE") {
-			subjects = append(subjects, nil)
-		} else {
-			subject, err := p.expression()
+		switch start := p.i; {
+		case p.optional("TRUE"):
+			subjects = append(subjects, subject{})
+		case p.optional("FALSE"):
+			subjects = append(subjects, subject{negated: true})
+		default:
+			value, err := p.expression()
 			if err != nil {
 				return err
 			}
-			s.Reads = append(s.Reads, subject)
-			subjects = append(subjects, &subject)
+			if t := p.peek(); t.Is("IS") || t.Is("NOT") || t.Kind == Word && classes[t.Text] || p.atRelationalOperator() || p.conditions[value.Name] {
+				p.i = start
+				c, err := p.condition()
+				if err != nil {
+					return err
+				}
+				subjects = append(subjects, subject{condition: c})
+				break
+			}
+			s.Reads = append(s.Reads, value)
+			subjects = append(subjects, subject{value: &value})
 		}
 		if !p.optional("ALSO") {
 			break
@@ -885,9 +907,9 @@ func (p *statementParser) evaluate(s *Statement) error {
 }
 
 // whenObjects parses one WHEN's objects, one per subject, into a condition.
-func (p *statementParser) whenObjects(subjects []*Operand) (*Condition, error) {
+func (p *statementParser) whenObjects(subjects []subject) (*Condition, error) {
 	var parts []*Condition
-	for i, subject := range subjects {
+	for i, subj := range subjects {
 		if i > 0 {
 			if err := p.expect("ALSO"); err != nil {
 				return nil, err
@@ -896,8 +918,8 @@ func (p *statementParser) whenObjects(subjects []*Operand) (*Condition, error) {
 		if p.optional("ANY") {
 			continue
 		}
-		if subject == nil {
-			c, err := p.condition()
+		if subj.value == nil {
+			c, err := p.conditionObject(subj)
 			if err != nil {
 				return nil, err
 			}
@@ -909,15 +931,15 @@ func (p *statementParser) whenObjects(subjects []*Operand) (*Condition, error) {
 		if err != nil {
 			return nil, err
 		}
-		c := &Condition{Op: "=", Left: subject, Right: &value}
+		c := &Condition{Op: "=", Left: subj.value, Right: &value}
 		if p.optional("THRU", "THROUGH") {
 			upper, err := p.expression()
 			if err != nil {
 				return nil, err
 			}
 			c = combine("AND", []*Condition{
-				{Op: ">=", Left: subject, Right: &value},
-				{Op: "<=", Left: subject, Right: &upper},
+				{Op: ">=", Left: subj.value, Right: &value},
+				{Op: "<=", Left: subj.value, Right: &upper},
 			})
 		}
 		if negated {
@@ -929,6 +951,27 @@ func (p *statementParser) whenObjects(subjects []*Operand) (*Condition, error) {
 		return &Condition{Op: "TRUE"}, nil
 	}
 	return combine("AND", parts), nil
+}
+
+// conditionObject parses the object of a subject that is no expression:
+// after TRUE or FALSE, a condition of the object's own, the opposite of
+// which is meant after FALSE; after a condition, TRUE for it and FALSE for
+// its opposite.
+func (p *statementParser) conditionObject(subj subject) (*Condition, error) {
+	if subj.condition == nil {
+		c, err := p.condition()
+		if err != nil || !subj.negated {
+			return c, err
+		}
+		return &Condition{Op: "NOT", Parts: []*Condition{c}}, nil
+	}
+	switch {
+	case p.optional("TRUE"):
+		return subj.condition, nil
+	case p.optional("FALSE"):
+		return &Condition{Op: "NOT", Parts: []*Condition{subj.condition}}, nil
+	}
+	return nil, fmt.Errorf("%s: a WHEN of a condition takes TRUE or FALSE, found %s", p.peek().Pos, p.peek())
 }
 
 // perform parses PERFORM of a procedure or THRU range, and the inline
@@ -955,7 +998,7 @@ func (p *statementParser) perform(s *Statement) error {
 }
 
 func (p *statementParser) performPhrase(s *Statement) error {
-	if p.optional("WITH") {
+	if p.optional("WITH") || p.peek().Is("TEST") {
 		if err := p.expect("TEST"); err != nil {
 			return err
 		}
@@ -963,12 +1006,14 @@ func (p *statementParser) performPhrase(s *Statement) error {
 		p.optional("BEFORE")
 	}
 	switch t := p.peek(); {
-	case p.at(p.i+1).Is("TIMES") && !t.Is("UNTIL") && !t.Is("VARYING"):
+	case (p.at(p.i+1).Is("TIMES") || p.at(p.i+1).Kind == LParen) && !t.Is("UNTIL") && !t.Is("VARYING"):
 		count, err := p.operand()
 		if err != nil {
 			return err
 		}
-		p.next()
+		if err := p.expect("TIMES"); err != nil {
+			return err
+		}
 		s.Reads = append(s.Reads, count)
 	case p.optional("VARYING"):
 		counter, err := p.operand()
@@ -1290,6 +1335,13 @@ func (p *statementParser) sort(s *Statement) error {
 	}
 	if p.optional("WITH") {
 		p.optional("DUPLICATES")
+		p.optional("IN")
+		p.optional("ORDER")
+	}
+	if p.optional("COLLATING") {
+		p.optional("SEQUENCE")
+		p.optional("IS")
+		p.next()
 	}
 	for _, phrase := range []struct{ procedure, files, mode string }{{"INPUT", "USING", "INPUT"}, {"OUTPUT", "GIVING", "OUTPUT"}} {
 		switch {

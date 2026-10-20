@@ -205,3 +205,14 @@ func TestContinuedNumber(t *testing.T) {
 		t.Errorf("tokens %q, want %q", strings.Join(got, " "), want)
 	}
 }
+
+// A picture string may be continued across lines, parentheses and all.
+func TestContinuedPicture(t *testing.T) {
+	tokens, err := Lex("test", []byte("       01  A PIC S9(\n      -        6)V9(6).\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tokens[3].Text; got != "S9(6)V9(6)" {
+		t.Errorf("picture %q", got)
+	}
+}

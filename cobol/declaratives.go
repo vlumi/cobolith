@@ -19,7 +19,7 @@ func (p *Program) ErrorProcedures(s Statement) []string {
 		modes := p.openModes(file)
 		for _, d := range p.Declaratives {
 			covers := slices.Contains(d.Files, file) || slices.ContainsFunc(d.Modes, func(m string) bool { return slices.Contains(modes, m) })
-			if covers && !slices.Contains(sections, d.Section) {
+			if covers && !d.Debugging && !slices.Contains(sections, d.Section) {
 				sections = append(sections, d.Section)
 			}
 		}

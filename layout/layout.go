@@ -71,7 +71,54 @@ func Records(entries []*cobol.DataEntry, dialect cobol.Dialect) ([]*Field, error
 			return nil, err
 		}
 	}
+	record := -1
+	for _, e := range entries {
+		if e.Level == 1 || e.Level == 77 {
+			record++
+		}
+		if e.Level == 66 {
+			if err := rename(records[record], e); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return records, nil
+}
+
+// rename adds a level-66 entry to its record: a field over the bytes of
+// the field it renames, or of the first through the last of those it
+// renames together, after the record's own fields. It is a group when it
+// spans more than one, or renames one.
+func rename(record *Field, e *cobol.DataEntry) error {
+	from, thru := named(record, e.Renames), named(record, e.Renames)
+	if e.RenamesThru != "" {
+		thru = named(record, e.RenamesThru)
+	}
+	if from == nil || thru == nil || thru.Start < from.Start {
+		return fmt.Errorf("%s: %s renames %s THRU %s, which are not fields of %s in that order", e.Pos, e.Name, e.Renames, e.RenamesThru, record.Name)
+	}
+	f := &Field{Level: 66, Name: e.Name, Start: from.Start, Length: thru.Start + thru.Size() - from.Start, Comment: e.Comment, Pos: e.Pos}
+	if from == thru && len(from.Children) == 0 {
+		f.Picture, f.Usage, f.Category = from.Picture, from.Usage, from.Category
+		f.Digits, f.Scale, f.Signed, f.Sign, f.SignSeparate = from.Digits, from.Scale, from.Signed, from.Sign, from.SignSeparate
+	} else {
+		f.Category, f.Usage = Group, "DISPLAY"
+	}
+	record.Children = append(record.Children, f)
+	return nil
+}
+
+// named finds a field of a record by name, at any level.
+func named(f *Field, name string) *Field {
+	if f.Name == name {
+		return f
+	}
+	for _, child := range f.Children {
+		if found := named(child, name); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // buildTree nests the entries by level number.
@@ -85,7 +132,7 @@ func buildTree(entries []*cobol.DataEntry) ([]*Field, error) {
 			}
 			f := open[len(open)-1]
 			f.Conditions = append(f.Conditions, Condition{Name: e.Name, Values: e.Values, Pos: e.Pos})
-		case e.Level == 78:
+		case e.Level == 78, e.Level == 66:
 		case e.Level == 1 || e.Level == 77:
 			f := newField(e)
 			records = append(records, f)

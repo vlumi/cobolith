@@ -121,23 +121,44 @@ func (p *statementParser) notCondition(last **Condition) (*Condition, error) {
 		}
 		return &Condition{Op: "NOT", Parts: []*Condition{c}}, nil
 	}
-	if p.peek().Kind == LParen {
+	if start := p.i; p.peek().Kind == LParen {
 		p.next()
 		c, err := p.orCondition(last)
-		if err != nil {
-			return nil, err
+		if err == nil && p.peek().Kind == RParen {
+			p.next()
+			if t := p.peek(); !t.Is("IS") && !t.Is("NOT") && !p.atRelationalOperator() {
+				return c, nil
+			}
 		}
-		if t := p.next(); t.Kind != RParen {
-			return nil, fmt.Errorf("%s: expected ), found %s", t.Pos, t)
-		}
-		return c, nil
+		// Not a condition in parentheses: an expression in them, as in
+		// (A + 1) = B, which simpleCondition reads.
+		p.i = start
 	}
 	return p.simpleCondition(last)
 }
 
 // simpleCondition parses a relation, a class or sign test, a condition
-// name, or the object of an abbreviated relation.
+// name, or the object of an abbreviated relation, with or without its
+// operator: in A = 1 OR 2, the 2 means A = 2, and in A > 1 AND < 9, the
+// < 9 means A < 9.
 func (p *statementParser) simpleCondition(last **Condition) (*Condition, error) {
+	if start := p.i; *last != nil {
+		p.optional("IS")
+		negated := p.optional("NOT")
+		if op, ok := p.relationalOperator(); ok {
+			right, err := p.expression()
+			if err != nil {
+				return nil, err
+			}
+			c := &Condition{Op: op, Left: (*last).Left, Right: &right}
+			*last = c
+			if negated {
+				c = &Condition{Op: "NOT", Parts: []*Condition{c}}
+			}
+			return c, nil
+		}
+		p.i = start
+	}
 	left, err := p.expression()
 	if err != nil {
 		return nil, err
@@ -165,6 +186,14 @@ func (p *statementParser) simpleCondition(last **Condition) (*Condition, error) 
 		c = &Condition{Op: "NOT", Parts: []*Condition{c}}
 	}
 	return c, nil
+}
+
+// atRelationalOperator reports whether a relational operator comes next.
+func (p *statementParser) atRelationalOperator() bool {
+	start := p.i
+	_, ok := p.relationalOperator()
+	p.i = start
+	return ok
 }
 
 // relationalOperator reads =, <, >, <=, >= or their words: EQUAL TO,

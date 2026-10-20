@@ -1,6 +1,6 @@
 # Conformance: NIST's COBOL-85 test suite
 
-Cobolith reads 245 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
+Cobolith reads 296 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
 
 The suite was created by NIST employees and is in the public domain; cobolith's tests use it with that acknowledgment, and do not redistribute it. `make conformance` fetches it from the Internet Archive's copy of NIST's address, checks it against the hash GNU Guix pins it by, and writes this report. Its programs are prepared as the suite's own program, EXEC85, prepares them with no control cards: the optional code a letter in column 7 flags is kept for the options it selects by default, A, E, H, L, T and Y, and made a comment for the rest. Its X-cards, the implementor's names it would substitute for XXXXXnnn, are left as written: most stand where any name may.
 
@@ -8,18 +8,18 @@ The suite was created by NIST employees and is in the public domain; cobolith's 
 | --- | --: | --: |
 | CM, Communication | 9 | 0 |
 | DB, Debugging | 15 | 0 |
-| EX, EXEC85, the suite's own program | 1 | 0 |
-| IC, Inter-program communication | 47 | 29 |
+| EX, EXEC85, the suite's own program | 1 | 1 |
+| IC, Inter-program communication | 47 | 30 |
 | IF, Intrinsic functions | 45 | 33 |
-| IX, Indexed I-O | 42 | 27 |
-| NC, Nucleus | 95 | 39 |
-| OB, Obsolete elements | 9 | 3 |
-| RL, Relative I-O | 35 | 29 |
+| IX, Indexed I-O | 42 | 36 |
+| NC, Nucleus | 95 | 45 |
+| OB, Obsolete elements | 9 | 4 |
+| RL, Relative I-O | 35 | 32 |
 | RW, Report writer | 6 | 0 |
 | SG, Segmentation | 13 | 0 |
-| SM, Source text manipulation | 17 | 10 |
-| SQ, Sequential I-O | 85 | 45 |
-| ST, Sort-merge | 40 | 30 |
+| SM, Source text manipulation | 17 | 12 |
+| SQ, Sequential I-O | 85 | 69 |
+| ST, Sort-merge | 40 | 34 |
 
 ## Why the rest are not read
 
@@ -27,12 +27,10 @@ Each program stops at its first error. The reasons, most common first, with the 
 
 | Reason | Programs |
 | --- | --- |
-| `unexpected END` | IX107A, NC237A, OBSQ1A, RL110A, RL111A, SM105A, SM205A, SQ102A, SQ103A, SQ104A, SQ106A, SQ107A, SQ108A, SQ109M, SQ110M, SQ112A, SQ113A, SQ115A, SQ121A, SQ127A, SQ204A, SQ212A, SQ213A, SQ216A, SQ217A, SQ218A, SQ219A, SQ220A, SQ223A, SQ224A, ST101A, ST119A, ST132A, ST139A |
-| `unexpected NEXT` | EXEC85, IC201A, IX205A, IX206A, IX208A, IX209A, IX210A, IX211A, IX214A, NC114M, NC231A, NC232A, NC233A, NC234A, NC235A, RL205A |
 | `SYNCHRONIZED is not supported yet` | NC105A, NC106A, NC107A, NC108M, NC118A, NC119A, NC175A, NC176A, NC177A, NC201A, NC211A, NC250A, OBNC2M |
 | `USE FOR DEBUGGING is not supported yet` | DB101A, DB102A, DB103M, DB104A, DB105A, DB201A, DB202A, DB203A, DB204A, DB301M, DB302M, DB303M, DB305M |
+| `symbol P is not supported yet` | IX110A, NC101A, NC104A, NC111A, NC114M, NC117A, NC120A, NC124A, NC134A, NC170A, NC171A, NC172A, NC173A |
 | `expected an operand, found )` | IF119A, IF120A, IF121A, IF122A, IF123A, IF128A, IF129A, IF132A, IF137A, IF138A, IF141A, IF402M |
-| `symbol P is not supported yet` | IX110A, NC101A, NC104A, NC111A, NC117A, NC120A, NC124A, NC134A, NC170A, NC171A, NC172A, NC173A |
 | `USAGE INDEX is not supported yet` | IC106A, IC107A, IC207A, IC208A, NC131A, NC133A, NC135A, NC206A, NC236A |
 | `unexpected WITH` | IX204A, IX401M, OBSQ3A, OBSQ5A, RL401M, SQ211A, SQ215A, ST140A                                                    TES00010 |
 | `IDENTIFICATION after END PROGRAM` | IC222A, IC223A, IC224A, IC225A, IC226A, IC227A, IC237A |
@@ -56,7 +54,6 @@ Each program stops at its first error. The reasons, most common first, with the 
 | `continuation line continues nothing` | NC205A, NC215A |
 | `expected END, found END-OF-PAGE` | SQ201M, SQ208M |
 | `expected a literal, found XXXXX063` | ST137A, ST147A |
-| `unexpected NOT` | IX108A, SQ126A |
 | `) is not supported yet` | NC401M |
 | `BEANO is not supported yet` | SG302M |
 | `COPY K2PRA REPLACING without BY` | SM202A |

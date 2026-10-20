@@ -21,14 +21,15 @@ import (
 func main() {
 	suite := flag.String("suite", "", "the suite's population file, newcob.val")
 	out := flag.String("out", "", "the report to write")
+	prepared := flag.String("prepared", "", "a directory to leave the prepared programs in, for a look at why one fails")
 	flag.Parse()
-	if err := run(*suite, *out); err != nil {
+	if err := run(*suite, *out, *prepared); err != nil {
 		fmt.Fprintln(os.Stderr, "conformance:", err)
 		os.Exit(1)
 	}
 }
 
-func run(suite, out string) error {
+func run(suite, out, prepared string) error {
 	f, err := os.Open(suite)
 	if err != nil {
 		return err
@@ -38,11 +39,15 @@ func run(suite, out string) error {
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "ccvs85")
-	if err != nil {
+	dir := prepared
+	if dir == "" {
+		if dir, err = os.MkdirTemp("", "ccvs85"); err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
 	programs, err := extract(members, dir)
 	if err != nil {
 		return err

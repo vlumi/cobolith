@@ -174,6 +174,18 @@ var forms = []struct{ statement, want string }{
 `},
 	{"CONTINUE", `CONTINUE
 `},
+	{"READ IN-FILE RECORD END MOVE 1 TO WS-EOF NOT END ADD 1 TO WS-N END-READ", `READ file IN-FILE
+  AT END
+    MOVE reads 1 writes WS-EOF
+  NOT AT END
+    ADD reads 1, WS-N writes WS-N
+`},
+	{"IF WS-A = 1 NEXT SENTENCE ELSE DISPLAY 'NOT ONE' END-IF", `IF [WS-A = 1]
+  THEN
+    NEXT SENTENCE
+  ELSE
+    DISPLAY reads 'NOT ONE'
+`},
 	{"GOBACK", `GOBACK
 `},
 	{"EXIT PROGRAM", `EXIT PROGRAM

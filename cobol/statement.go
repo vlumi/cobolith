@@ -82,7 +82,7 @@ type Operand struct {
 var verbs = map[string]bool{
 	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "COMPUTE": true, "CONTINUE": true,
 	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
-	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true,
+	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true, "NEXT": true,
 	"MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true,
 	"REWRITE": true, "SEARCH": true, "SET": true, "SORT": true, "START": true, "STOP": true,
 	"STRING": true, "SUBTRACT": true, "UNSTRING": true, "WRITE": true,
@@ -270,6 +270,9 @@ func (p *statementParser) statement() (Statement, error) {
 		}
 	case "GOBACK":
 		err = p.returning(&s)
+	case "NEXT":
+		err = p.expect("SENTENCE")
+		s.Verb = "NEXT SENTENCE"
 	case "CONTINUE":
 	}
 	if err != nil {
@@ -1256,7 +1259,7 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string, ph
 		negated := p.optional("NOT")
 		var kind string
 		switch {
-		case p.optional("AT"):
+		case p.optional("AT") || p.peek().Is("END"):
 			if err := p.expect("END"); err != nil {
 				return err
 			}

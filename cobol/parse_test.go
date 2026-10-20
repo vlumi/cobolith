@@ -671,3 +671,29 @@ func mustLex(t *testing.T, source string) []Token {
 	}
 	return tokens[:len(tokens)-1]
 }
+
+// A program in Hitachi COBOL2002, in Shift_JIS: Japanese names for the
+// record, its fields and a paragraph, national items and literals.
+func TestJapaneseProgram(t *testing.T) {
+	source := "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. JTEST.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n" +
+		"       01  \x83\x8c\x83\x52\x81\x5b\x83\x68.\n" + // レコード
+		"           05  \x8e\x81\x96\xbc PIC N(3) VALUE N\"\x93\xfa\x96\x7b\x8c\xea\".\n" + // 氏名, 日本語
+		"           05  \x8b\xe6\x95\xaa PIC X(2) VALUE \"ab\".\n" + // 区分
+		"       PROCEDURE DIVISION.\n       \x8f\x88\x97\x9d.\n" + // 処理
+		"           MOVE N\"\x93\xfa\" TO \x8e\x81\x96\xbc\n           STOP RUN.\n"
+	path := filepath.Join(t.TempDir(), "JTEST.cbl")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ReadProgramIn(path, nil, Hitachi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := p.WorkingStorage[0]
+	if record.Name != "\x83\x8c\x83\x52\x81\x5b\x83\x68" || len(p.WorkingStorage) != 3 || p.WorkingStorage[1].Values[0] != "N'\x93\xfa\x96\x7b\x8c\xea'" {
+		t.Errorf("record %q, %d entries, value %q", record.Name, len(p.WorkingStorage), p.WorkingStorage[1].Values)
+	}
+	if para := p.Paragraphs[0]; para.Name != "\x8f\x88\x97\x9d" || para.Statements[0].Text != "MOVE N'\x93\xfa' TO \x8e\x81\x96\xbc" {
+		t.Errorf("paragraph %q, statement %q", para.Name, para.Statements[0].Text)
+	}
+}

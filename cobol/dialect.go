@@ -27,6 +27,13 @@ type Dialect struct {
 	// Synchronizes is whether the dialect's rules say where SYNCHRONIZED
 	// items go; otherwise compiler directives do.
 	Synchronizes bool
+	// Encoding is the encoding the source and its data are in, where it
+	// is not ASCII or UTF-8: "Shift_JIS" for the Japanese compilers,
+	// whose two-byte characters the lexer must not split or upper-case.
+	Encoding string
+	// NationalSize is the bytes one character of a national item, PIC N,
+	// takes; 0 where the dialect's rules are not known.
+	NationalSize int
 }
 
 var (
@@ -41,8 +48,25 @@ var (
 	MicroFocus = Dialect{Name: "mf", Title: "Micro Focus", BinarySizes: []int{1, 2, 3, 4, 5, 6, 7, 8}}
 )
 
+// Hitachi is Hitachi COBOL2002: Japanese characters in Shift_JIS, two
+// bytes each in the source and in a national item; a binary item a
+// halfword, fullword or doubleword, as on IBM; floating point in IEEE;
+// and native binary's byte order the platform's, so not known. Its
+// index items' size and its SYNCHRONIZED boundaries are not read yet.
+var Hitachi = Dialect{Name: "hitachi", Title: "Hitachi", BinarySizes: []int{2, 4, 8},
+	Encoding: ShiftJIS, NationalSize: 2}
+
 // Dialects are the dialects the library reads.
-var Dialects = []Dialect{IBM, MicroFocus}
+var Dialects = []Dialect{IBM, MicroFocus, Hitachi}
+
+// ShiftJIS is the Encoding of the Japanese compilers' sources.
+const ShiftJIS = "Shift_JIS"
+
+// leadsShiftJIS reports whether a byte starts a two-byte Shift_JIS
+// character, whose second byte is 0x40 to 0x7E or 0x80 to 0xFC.
+func leadsShiftJIS(c byte) bool {
+	return c >= 0x81 && c <= 0x9F || c >= 0xE0 && c <= 0xFC
+}
 
 // DialectNamed finds a dialect by its name.
 func DialectNamed(name string) (Dialect, bool) {

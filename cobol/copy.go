@@ -28,10 +28,15 @@ var CopybookExtensions = []string{".cpy", ".CPY", ".cbl"}
 // the source after it, copybooks expanded, until REPLACE OFF or the next
 // REPLACE.
 func Read(path string, copybookDirs []string) ([]Token, error) {
-	return read(path, copybookDirs, nil)
+	return ReadIn(path, copybookDirs, "")
 }
 
-func read(path string, copybookDirs []string, including []string) ([]Token, error) {
+// ReadIn reads a source file in an encoding, as LexIn lexes it.
+func ReadIn(path string, copybookDirs []string, encoding string) ([]Token, error) {
+	return read(path, copybookDirs, encoding, nil)
+}
+
+func read(path string, copybookDirs []string, encoding string, including []string) ([]Token, error) {
 	if slices.Contains(including, path) {
 		return nil, fmt.Errorf("%s: copies itself through %v", path, including)
 	}
@@ -39,7 +44,7 @@ func read(path string, copybookDirs []string, including []string) ([]Token, erro
 	if err != nil {
 		return nil, err
 	}
-	tokens, err := Lex(path, source)
+	tokens, err := LexIn(path, source, encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +62,7 @@ func read(path string, copybookDirs []string, including []string) ([]Token, erro
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", tokens[i].Pos, err)
 		}
-		copied, err := read(copybook, copybookDirs, append(slices.Clip(including), path))
+		copied, err := read(copybook, copybookDirs, encoding, append(slices.Clip(including), path))
 		if err != nil {
 			return nil, err
 		}

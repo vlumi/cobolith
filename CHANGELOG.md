@@ -4,6 +4,14 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- Hitachi COBOL2002, `cobol.Hitachi`, the first Japanese dialect: source and data in Shift_JIS, read two bytes at a time by `LexIn`, `ReadIn`, `ReadProgramIn` and `ReadProgramsIn`, which take the dialect or its encoding; Japanese names stay whole and are not upper-cased in their second bytes. National literals, `N"..."`, `NC"..."` and `NX"..."`, a token kind of their own, `National`. National items, `PIC N` and `USAGE NATIONAL`, and national-edited ones, `PIC NBN`, laid out at the dialect's `NationalSize` bytes a character: two in Hitachi COBOL2002, and an error where it is not known. `cobol.Dialect` has `Encoding` and `NationalSize`.
+
+### Fixed
+
+- A literal's bytes above 0x7F were encoded as UTF-8 when the literal was read, so an `X'...'` literal was right but a quoted one of such bytes was not.
+
 ## [0.5.0] - 2026-10-20
 
 ### Added

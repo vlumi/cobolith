@@ -20,7 +20,7 @@ Cobolith is a Go library for reading COBOL: `cobol` lexes and parses source and 
 - Run `make ci` before opening or updating a pull request and only push when it passes; a change to Markdown alone needs none.
 - Merge commits only, so the by-concern commits stay visible on `main`; branches are deleted on merge: `gh pr merge --merge --delete-branch` once the hosted check has passed.
 - A change a user of the library would notice adds a line to CHANGELOG.md, under Unreleased, in the same pull request: what it reads that it did not, what it reads differently, or what in its API changed.
-- Releases are tags, `vMAJOR.MINOR.PATCH`, below 1.0 while the API moves; a release moves the Unreleased lines under its version and date.
+- Releases are tags, `vMAJOR.MINOR.PATCH`, below 1.0 while the API moves; a release moves the Unreleased lines under its version and date, and once the tag is pushed, a GitHub Release on it carries that entry as its notes. Releases are immutable: get the notes right before creating one.
 
 ## Code
 

@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
 ### Added
 
 - `REPLACE`, which replaces text in the source after it until `REPLACE OFF`, as `COPY REPLACING` does; and a `REPLACING` operand with a subscript.
@@ -55,7 +57,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/vlumi/cobolith/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vlumi/cobolith/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/vlumi/cobolith/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/vlumi/cobolith/compare/v0.1.0...v0.2.0

@@ -14,6 +14,7 @@ const (
 	AlphanumericEdited = "alphanumeric-edited"
 	Numeric            = "numeric"
 	NumericEdited      = "numeric-edited"
+	Index              = "index"
 	Group              = "group"
 )
 

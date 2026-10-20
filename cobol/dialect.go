@@ -11,12 +11,15 @@ type Dialect struct {
 	// BinarySizes are the sizes, in bytes, a binary item can take, of
 	// which it takes the smallest that holds its digits.
 	BinarySizes []int
+	// IndexSize is the size, in bytes, of an item of USAGE INDEX; 0 where
+	// it depends on more than the dialect.
+	IndexSize int
 }
 
 var (
 	// IBM is an IBM compiler's COBOL: a binary item is a halfword, a
-	// fullword or a doubleword.
-	IBM = Dialect{Name: "ibm", Title: "IBM", BinarySizes: []int{2, 4, 8}}
+	// fullword or a doubleword, and an index a fullword.
+	IBM = Dialect{Name: "ibm", Title: "IBM", BinarySizes: []int{2, 4, 8}, IndexSize: 4}
 	// MicroFocus is Micro Focus COBOL: a binary item takes as many bytes
 	// as its digits need.
 	MicroFocus = Dialect{Name: "mf", Title: "Micro Focus", BinarySizes: []int{1, 2, 3, 4, 5, 6, 7, 8}}

@@ -12,7 +12,7 @@ type DataEntry struct {
 	Level   int
 	Name    string // FILLER when the entry has no name
 	Picture string
-	Usage   string // DISPLAY, COMP, COMP-1, COMP-2, COMP-3 or COMP-5
+	Usage   string // DISPLAY, COMP, COMP-1, COMP-2, COMP-3, COMP-5 or INDEX
 	// Sign is where a signed display number's sign is, LEADING or
 	// TRAILING, if a SIGN clause says; SignSeparate when it takes a byte
 	// of its own rather than being overpunched on a digit.
@@ -60,6 +60,7 @@ var usages = map[string]string{
 	"COMPUTATIONAL-1": "COMP-1",
 	"COMP-2":          "COMP-2",
 	"COMPUTATIONAL-2": "COMP-2",
+	"INDEX":           "INDEX",
 }
 
 // ParseDataEntry parses the tokens of one data description entry, without

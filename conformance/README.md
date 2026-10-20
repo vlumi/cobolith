@@ -1,6 +1,6 @@
 # Conformance: NIST's COBOL-85 test suite
 
-Cobolith reads 366 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
+Cobolith reads 378 of the 459 programs of CCVS85, the COBOL Compiler Validation System for COBOL-85 of the National Institute of Standards and Technology. A program is read when it is lexed, its COPY statements expanded from the suite's library, parsed, and its records laid out in IBM COBOL. Whether it would compile, or run as the suite expects, is not tested.
 
 The suite was created by NIST employees and is in the public domain; cobolith's tests use it with that acknowledgment, and do not redistribute it. `make conformance` fetches it from the Internet Archive's copy of NIST's address, checks it against the hash GNU Guix pins it by, and writes this report. Its programs are prepared as the suite's own program, EXEC85, prepares them with no control cards: the optional code a letter in column 7 flags is kept for the options it selects by default, A, E, H, L, T and Y, and made a comment for the rest. Its X-cards, the implementor's names it would substitute for XXXXXnnn, are left as written: most stand where any name may.
 
@@ -9,10 +9,10 @@ The suite was created by NIST employees and is in the public domain; cobolith's 
 | CM, Communication | 9 | 0 |
 | DB, Debugging | 15 | 0 |
 | EX, EXEC85, the suite's own program | 1 | 1 |
-| IC, Inter-program communication | 47 | 39 |
+| IC, Inter-program communication | 47 | 43 |
 | IF, Intrinsic functions | 45 | 45 |
 | IX, Indexed I-O | 42 | 39 |
-| NC, Nucleus | 95 | 59 |
+| NC, Nucleus | 95 | 67 |
 | OB, Obsolete elements | 9 | 7 |
 | RL, Relative I-O | 35 | 34 |
 | RW, Report writer | 6 | 0 |
@@ -29,10 +29,8 @@ Each program stops at its first error. The reasons, most common first, with the 
 | --- | --- |
 | `SYNCHRONIZED is not supported yet` | NC105A, NC106A, NC107A, NC108M, NC118A, NC119A, NC175A, NC176A, NC177A, NC201A, NC211A, NC250A, OBNC2M |
 | `USE FOR DEBUGGING is not supported yet` | DB101A, DB102A, DB103M, DB104A, DB105A, DB201A, DB202A, DB203A, DB204A, DB301M, DB302M, DB303M, DB305M |
-| `USAGE INDEX is not supported yet` | IC106A, IC107A, IC207A, IC208A, NC131A, NC133A, NC135A, NC206A, NC236A |
 | `expected a number, found CD` | CM103M, CM104M, CM201M, CM303M, CM401M, DB205A, DB304M |
 | `expected a number, found RD` | RW101A, RW102A, RW103A, RW104A |
-| `SIGN on a group is not supported yet` | NC116A, NC117A, NC120A |
 | `SYNC is not supported yet` | NC138A, NC203A, NC251A |
 | `expected a literal, found XXXXX081` | NC103A, NC174A, NC254A |
 | `unexpected CONTENT` | IC224A, IC225A, IC227A |

@@ -82,8 +82,9 @@ type Operand struct {
 var verbs = map[string]bool{
 	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "COMPUTE": true, "CONTINUE": true,
 	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
-	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true,
+	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true, "NEXT": true,
 	"MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true,
+	"ALTER": true, "CANCEL": true,
 	"REWRITE": true, "SEARCH": true, "SET": true, "SORT": true, "START": true, "STOP": true,
 	"STRING": true, "SUBTRACT": true, "UNSTRING": true, "WRITE": true,
 }
@@ -115,8 +116,8 @@ var keywords = map[string]bool{
 	"REPLACING": true, "TALLYING": true, "CONVERTING": true, "DELIMITER": true, "COUNT": true,
 	"CHARACTERS": true, "LEADING": true, "FIRST": true, "INITIAL": true, "FOR": true, "DATA": true,
 	"ALPHANUMERIC": true, "ALPHANUMERIC-EDITED": true, "NUMERIC-EDITED": true, "NATIONAL": true,
-	"NATIONAL-EDITED": true,
-	"=":               true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
+	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true, "VALUE": true,
+	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
 func isTerminator(t Token) bool {
@@ -258,10 +259,19 @@ func (p *statementParser) statement() (Statement, error) {
 		err = p.start(&s)
 	case "CALL":
 		err = p.call(&s)
+	case "CANCEL":
+		s.Reads, err = p.operands()
+	case "ALTER":
+		err = p.alter(&s)
 	case "SORT", "MERGE":
 		err = p.sort(&s)
 	case "STOP":
-		if err = p.expect("RUN"); err == nil {
+		if t := p.peek(); t.isLiteral() || t.Kind == Word && isNumber(t.Text) {
+			// STOP literal shows the literal and waits for the operator; the run
+			// goes on, so it is not STOP RUN's verb.
+			s.Verb = "STOP LITERAL"
+			s.Reads = []Operand{{Text: p.next().String(), Pos: t.Pos}}
+		} else if err = p.expect("RUN"); err == nil {
 			err = p.returning(&s)
 		}
 	case "EXIT":
@@ -270,6 +280,9 @@ func (p *statementParser) statement() (Statement, error) {
 		}
 	case "GOBACK":
 		err = p.returning(&s)
+	case "NEXT":
+		err = p.expect("SENTENCE")
+		s.Verb = "NEXT SENTENCE"
 	case "CONTINUE":
 	}
 	if err != nil {
@@ -340,9 +353,12 @@ func (p *statementParser) operand() (Operand, error) {
 		return op, nil
 	case t.Kind != Word || verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION"):
 		return Operand{}, fmt.Errorf("expected an operand, found %s", t)
+	case t.Is("ALL") && p.peek().Kind == RParen:
+		return op, nil
 	case t.Is("ALL"):
 		rest, err := p.operand()
 		op.Text += " " + rest.Text
+		op.Refs = rest.Refs
 		return op, err
 	case isNumber(t.Text) || figurative[t.Text]:
 		return op, nil
@@ -480,6 +496,7 @@ func (p *statementParser) move(s *Statement) error {
 // the operands after TO, FROM, BY or INTO are both read and written; with
 // it, they are read and the GIVING operands written.
 func (p *statementParser) arithmetic(s *Statement) error {
+	p.optional("CORRESPONDING", "CORR")
 	reads, err := p.operands()
 	if err != nil {
 		return err
@@ -1028,7 +1045,7 @@ func (p *statementParser) goTo(s *Statement) error {
 		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
 	}
 	if len(s.Procedures) == 0 {
-		return fmt.Errorf("GO TO names no paragraph")
+		return nil
 	}
 	if p.optional("DEPENDING") {
 		p.optional("ON")
@@ -1037,6 +1054,31 @@ func (p *statementParser) goTo(s *Statement) error {
 			return err
 		}
 		s.Reads = append(s.Reads, selector)
+	}
+	return nil
+}
+
+// alter parses ALTER paragraph TO [PROCEED TO] paragraph ..., which
+// changes where the GO TO that is the first paragraph's one statement goes:
+// the pairs, in order.
+func (p *statementParser) alter(s *Statement) error {
+	for t := p.peek(); t.Kind == Word && p.procedures[t.Text]; t = p.peek() {
+		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
+		if err := p.expect("TO"); err != nil {
+			return err
+		}
+		if p.optional("PROCEED") {
+			if err := p.expect("TO"); err != nil {
+				return err
+			}
+		}
+		if t := p.next(); !p.procedures[t.Text] {
+			return fmt.Errorf("ALTER to %s, no paragraph", t)
+		}
+		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.tokens[p.i-1].Text})
+	}
+	if len(s.Procedures) == 0 {
+		return fmt.Errorf("ALTER names no paragraph")
 	}
 	return nil
 }
@@ -1074,7 +1116,9 @@ func (p *statementParser) search(s *Statement) error {
 	return nil
 }
 
-// files parses OPEN and CLOSE: the files, with OPEN's modes.
+// files parses OPEN and CLOSE: the files, with OPEN's modes, and the
+// phrases about reels and locks, REVERSED, NO REWIND, REEL, UNIT and WITH
+// LOCK, passed over.
 func (p *statementParser) files(s *Statement) {
 	mode := ""
 	for {
@@ -1082,6 +1126,7 @@ func (p *statementParser) files(s *Statement) {
 		switch {
 		case t.Kind == Word && slices.Contains([]string{"INPUT", "OUTPUT", "EXTEND", "I-O"}, t.Text):
 			mode = p.next().Text
+		case p.optional("WITH", "REEL", "UNIT", "FOR", "NO", "LOCK", "REWIND", "REMOVAL", "REVERSED"):
 		case t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t):
 			s.Files = append(s.Files, FileRef{Name: p.next().Text, Mode: mode})
 		default:
@@ -1139,7 +1184,7 @@ func (p *statementParser) write(s *Statement) error {
 	if s.Verb == "RELEASE" {
 		return nil
 	}
-	return p.conditionalPhrases(s, "END-"+s.Verb, "INVALID KEY")
+	return p.conditionalPhrases(s, "END-"+s.Verb, "INVALID KEY", "AT END-OF-PAGE")
 }
 
 // start parses START file [KEY IS relation key], which positions an
@@ -1161,9 +1206,10 @@ func (p *statementParser) start(s *Statement) error {
 	return p.conditionalPhrases(s, "END-START", "INVALID KEY")
 }
 
-// call parses CALL program [USING [BY REFERENCE | BY CONTENT] items].
-// Items passed by reference may be changed by the program called, so they
-// are both read and written; those by content only read.
+// call parses CALL program [USING [[BY] REFERENCE | [BY] CONTENT | [BY]
+// VALUE] items]. Items passed by reference may be changed by the program
+// called, so they are both read and written; those by content or value
+// only read.
 func (p *statementParser) call(s *Statement) error {
 	program, err := p.operand()
 	if err != nil {
@@ -1178,9 +1224,9 @@ func (p *statementParser) call(s *Statement) error {
 	if p.optional("USING") {
 		byContent := false
 		for {
-			if p.optional("BY") {
-				byContent = p.optional("CONTENT")
-				p.optional("REFERENCE")
+			p.optional("BY")
+			if p.peek().Is("CONTENT") || p.peek().Is("VALUE") || p.peek().Is("REFERENCE") {
+				byContent = !p.next().Is("REFERENCE")
 			}
 			items, err := p.operands()
 			if err != nil {
@@ -1256,7 +1302,11 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string, ph
 		negated := p.optional("NOT")
 		var kind string
 		switch {
-		case p.optional("AT"):
+		case p.peek().Is("END-OF-PAGE") || p.peek().Is("EOP") || p.peek().Is("AT") && (p.at(p.i+1).Is("END-OF-PAGE") || p.at(p.i+1).Is("EOP")):
+			p.optional("AT")
+			p.next()
+			kind = "AT END-OF-PAGE"
+		case p.optional("AT") || p.peek().Is("END"):
 			if err := p.expect("END"); err != nil {
 				return err
 			}

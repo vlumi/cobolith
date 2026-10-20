@@ -14,6 +14,7 @@ const (
 	AlphanumericEdited = "alphanumeric-edited"
 	Numeric            = "numeric"
 	NumericEdited      = "numeric-edited"
+	Index              = "index"
 	Group              = "group"
 )
 
@@ -21,13 +22,15 @@ const (
 type picture struct {
 	positions int // character positions in display form
 	digits    int
-	scale     int // digits after the implied decimal point
+	scale     int // digits after the implied decimal point; below zero, the number is so many tens
 	signed    bool
 	category  string
 }
 
 // parsePicture analyzes a picture string such as S9(7)V99, X(20) or
-// Z,ZZ9.99-. The scaling position P is not supported.
+// Z,ZZ9.99-. A scaling position P takes no storage: before the digits, it
+// puts the decimal point to its left, a digit more after it, as PPP99
+// holds .00012; after them, a ten more, as 99PPP holds 12000.
 func parsePicture(s string) (picture, error) {
 	symbols, err := expandPicture(s)
 	if err != nil {
@@ -44,6 +47,13 @@ func parsePicture(s string) (picture, error) {
 			p.signed = true
 		case 'V':
 			decimal = true
+		case 'P':
+			if p.digits == 0 {
+				decimal = true
+				p.scale++
+			} else {
+				p.scale--
+			}
 		case '9':
 			p.positions++
 			p.digits++

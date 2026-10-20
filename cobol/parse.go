@@ -55,9 +55,28 @@ type FileControl struct {
 	Organization string
 	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
 	RecordKey    string // an indexed file's key
-	RelativeKey  string // the item that holds a relative file's record number
-	Status       string
-	Pos          Pos
+	// AlternateKeys are an indexed file's other keys, which it may also be
+	// read by.
+	AlternateKeys []AlternateKey
+	RelativeKey   string // the item that holds a relative file's record number
+	Status        string
+	Pos           Pos
+}
+
+// selectClauses are the words that start a clause of a SELECT entry: a
+// word of them after RELATIVE makes RELATIVE the organization, any other
+// the name of the relative key.
+var selectClauses = map[string]bool{
+	"ASSIGN": true, "ORGANIZATION": true, "ACCESS": true, "RECORD": true, "ALTERNATE": true,
+	"RELATIVE": true, "FILE": true, "STATUS": true, "RESERVE": true, "PADDING": true,
+	"SEQUENTIAL": true, "INDEXED": true,
+}
+
+// AlternateKey is an alternate record key of an indexed file, and whether
+// records may share its value.
+type AlternateKey struct {
+	Name       string
+	Duplicates bool
 }
 
 // FileDescription is an FD or SD entry with the records under it, and the
@@ -99,11 +118,54 @@ func ReadProgram(path string, copybookDirs []string) (*Program, error) {
 }
 
 // Parse parses the tokens of a program, and of the programs nested in it.
+// A source file of more than one program is ParseAll's.
 func Parse(path string, tokens []Token) (*Program, error) {
-	own, nested, err := splitNested(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+	p, rest, err := parseFirst(path, tokens)
+	if err == nil && len(rest) > 0 {
+		err = fmt.Errorf("%s: %s: a second program after END PROGRAM, which ParseAll reads", path, rest[0].Pos)
 	}
+	return p, err
+}
+
+// ReadPrograms reads and parses every program of a source file, its
+// copybooks expanded: those it holds one after the other, each ended by
+// END PROGRAM, each with the programs nested in it.
+func ReadPrograms(path string, copybookDirs []string) ([]*Program, error) {
+	tokens, err := Read(path, copybookDirs)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAll(path, tokens)
+}
+
+// ParseAll parses the tokens of every program of a source file, in order.
+func ParseAll(path string, tokens []Token) ([]*Program, error) {
+	var programs []*Program
+	for len(tokens) > 0 {
+		p, rest, err := parseFirst(path, tokens)
+		if err != nil {
+			return nil, err
+		}
+		programs = append(programs, p)
+		tokens = rest
+	}
+	return programs, nil
+}
+
+// parseFirst parses the first program of the tokens, and returns the
+// tokens after it.
+func parseFirst(path string, tokens []Token) (*Program, []Token, error) {
+	own, nested, rest, err := splitNested(tokens)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	p, err := parseProgram(path, tokens, own, nested)
+	return p, rest, err
+}
+
+// parseProgram parses a program from its own tokens, and the programs
+// nested in it from theirs; its comment is that before its first token.
+func parseProgram(path string, tokens, own []Token, nested [][]Token) (*Program, error) {
 	divisions, err := splitDivisions(own)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
@@ -142,8 +204,8 @@ func Parse(path string, tokens []Token) (*Program, error) {
 // splitNested separates a program's own tokens from those of the programs
 // nested in it, each from its IDENTIFICATION DIVISION through the END
 // PROGRAM that names it. The program's own END PROGRAM, if it has one,
-// ends it.
-func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
+// ends it, and the rest are the tokens after it.
+func splitNested(tokens []Token) (own []Token, nested [][]Token, rest []Token, err error) {
 	var open []string // the nested programs not yet ended, innermost last
 	start := 0
 	for i := 0; i < len(tokens); i++ {
@@ -160,13 +222,10 @@ func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
 				name = tokens[i+2].Text
 			}
 			if len(open) == 0 {
-				if end+1 < len(tokens) {
-					return nil, nil, fmt.Errorf("%s: %s after END PROGRAM", tokens[end+1].Pos, tokens[end+1])
-				}
-				return own, nested, nil
+				return own, nested, tokens[end+1:], nil
 			}
 			if innermost := open[len(open)-1]; name != innermost {
-				return nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
+				return nil, nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
 			}
 			if open = open[:len(open)-1]; len(open) == 0 {
 				nested = append(nested, tokens[start:end+1])
@@ -177,9 +236,9 @@ func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
 		}
 	}
 	if len(open) > 0 {
-		return nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
+		return nil, nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
 	}
-	return own, nested, nil
+	return own, nested, nil, nil
 }
 
 // programID is the PROGRAM-ID of the program whose IDENTIFICATION
@@ -287,7 +346,9 @@ func (p *Program) parseEnvironment(tokens []Token) error {
 }
 
 // parseSelect parses SELECT [OPTIONAL] name ASSIGN [TO] target and the
-// ORGANIZATION, ACCESS MODE, RECORD KEY and FILE STATUS clauses.
+// ORGANIZATION, ACCESS MODE, RECORD KEY, ALTERNATE RECORD KEY, RELATIVE
+// KEY and FILE STATUS clauses; and RESERVE, PADDING and RECORD DELIMITER,
+// which change no record, and are passed over.
 func parseSelect(entry []Token) (FileControl, error) {
 	c := &cursor{tokens: entry}
 	c.next()
@@ -299,9 +360,12 @@ func parseSelect(entry []Token) (FileControl, error) {
 		case clause.Is("ASSIGN"):
 			c.optional("TO")
 			file.Assign = c.next().Text
-		case clause.Is("ORGANIZATION"):
-			c.optional("IS")
-			file.Organization = c.next().Text
+		case clause.Is("ORGANIZATION") || clause.Is("SEQUENTIAL") || clause.Is("INDEXED") || clause.Is("RELATIVE") && (c.done() || selectClauses[c.peek().Text]):
+			if clause.Is("ORGANIZATION") {
+				c.optional("IS")
+				clause = c.next()
+			}
+			file.Organization = clause.Text
 			if file.Organization == "LINE" || file.Organization == "RECORD" {
 				file.Organization += " " + c.next().Text
 			}
@@ -309,20 +373,46 @@ func parseSelect(entry []Token) (FileControl, error) {
 			c.optional("MODE")
 			c.optional("IS")
 			file.Access = c.next().Text
+		case clause.Is("RECORD") && c.peek().Is("DELIMITER"):
+			c.next()
+			c.optional("IS")
+			c.next()
 		case clause.Is("RECORD"):
 			c.optional("KEY")
 			c.optional("IS")
-			file.RecordKey = c.next().Text
+			file.RecordKey = c.qualified()
+		case clause.Is("ALTERNATE"):
+			c.optional("RECORD")
+			c.optional("KEY")
+			c.optional("IS")
+			key := AlternateKey{Name: c.qualified()}
+			if c.optional("WITH") || c.peek().Is("DUPLICATES") {
+				key.Duplicates = c.optional("DUPLICATES")
+			}
+			file.AlternateKeys = append(file.AlternateKeys, key)
+		case clause.Is("RESERVE"):
+			if _, err := c.number(); err != nil {
+				return FileControl{}, err
+			}
+			if !c.optional("AREA") {
+				c.optional("AREAS")
+			}
+		case clause.Is("PADDING"):
+			c.optional("CHARACTER")
+			c.optional("IS")
+			c.next()
 		case clause.Is("RELATIVE"):
 			c.optional("KEY")
 			c.optional("IS")
-			file.RelativeKey = c.next().Text
-		case clause.Is("FILE"):
-			if err := c.expect("STATUS"); err != nil {
-				return FileControl{}, err
+			file.RelativeKey = c.qualified()
+		case clause.Is("FILE") || clause.Is("STATUS"):
+			if clause.Is("FILE") {
+				if err := c.expect("STATUS"); err != nil {
+					return FileControl{}, err
+				}
 			}
 			c.optional("IS")
-			file.Status = c.next().Text
+			file.Status = c.qualified()
 		default:
 			return FileControl{}, fmt.Errorf("%s: SELECT %s: %s is not supported yet", clause.Pos, file.Name, clause)
 		}
@@ -360,35 +450,72 @@ func (p *Program) parseData(tokens []Token) error {
 // parseFileDescription parses FD or SD name and its RECORD clause:
 // RECORD [CONTAINS] n [CHARACTERS], RECORD [CONTAINS] n TO m [CHARACTERS],
 // or RECORD [IS] VARYING [IN] [SIZE] [FROM] n TO m [CHARACTERS] DEPENDING
-// [ON] item.
+// [ON] item. The clauses that change no record, BLOCK, LABEL, VALUE OF,
+// DATA RECORDS, LINAGE, CODE-SET, EXTERNAL and GLOBAL, are passed over.
 func parseFileDescription(entry []Token) (FileDescription, error) {
 	fd := FileDescription{Kind: entry[0].Text, Name: entry[1].Text, Pos: entry[0].Pos}
 	c := &cursor{tokens: entry[2:]}
 	for !c.done() {
 		clause := c.next()
-		if !clause.Is("RECORD") {
-			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
-		}
-		for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
-			c.optional(word)
-		}
-		var err error
-		if fd.MinLength, err = c.number(); err != nil {
-			return FileDescription{}, err
-		}
-		fd.MaxLength = fd.MinLength
-		if c.optional("TO") {
-			if fd.MaxLength, err = c.number(); err != nil {
+		switch {
+		case clause.Is("RECORD"):
+			if err := fd.parseRecordClause(c); err != nil {
 				return FileDescription{}, err
 			}
-		}
-		c.optional("CHARACTERS")
-		if c.optional("DEPENDING") {
-			c.optional("ON")
-			fd.LengthIn = c.next().Text
+		case clause.Is("LABEL") || clause.Is("DATA"):
+			if !c.optional("RECORD") {
+				c.optional("RECORDS")
+			}
+			c.passClause()
+		case clause.Is("BLOCK") || clause.Is("VALUE") || clause.Is("LINAGE") || clause.Is("CODE-SET") || clause.Is("IS"):
+			c.passClause()
+		case clause.Is("EXTERNAL") || clause.Is("GLOBAL"):
+		default:
+			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
 		}
 	}
 	return fd, nil
+}
+
+// fdClauses are the words that start a clause of an FD or SD entry.
+var fdClauses = map[string]bool{
+	"RECORD": true, "BLOCK": true, "LABEL": true, "VALUE": true, "DATA": true, "LINAGE": true,
+	"CODE-SET": true, "EXTERNAL": true, "GLOBAL": true,
+}
+
+// passClause passes over the rest of a clause of an FD or SD entry, up to
+// the next clause.
+func (c *cursor) passClause() {
+	for !c.done() && (c.peek().Kind != Word || !fdClauses[c.peek().Text]) {
+		c.next()
+	}
+}
+
+// parseRecordClause parses the rest of a RECORD clause, after RECORD: no
+// lengths at all, for RECORD IS VARYING alone.
+func (fd *FileDescription) parseRecordClause(c *cursor) error {
+	for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
+		c.optional(word)
+	}
+	if c.done() || fdClauses[c.peek().Text] {
+		return nil
+	}
+	var err error
+	if fd.MinLength, err = c.number(); err != nil {
+		return err
+	}
+	fd.MaxLength = fd.MinLength
+	if c.optional("TO") {
+		if fd.MaxLength, err = c.number(); err != nil {
+			return err
+		}
+	}
+	c.optional("CHARACTERS")
+	if c.optional("DEPENDING") {
+		c.optional("ON")
+		fd.LengthIn = c.next().Text
+	}
+	return nil
 }
 
 func (p *Program) addDataEntry(section string, tokens []Token) error {
@@ -478,6 +605,10 @@ func (s *splitter) take(tokens []Token, i int) (int, error) {
 		s.section, s.header = t.Text, &tokens[i]
 		s.procedures[t.Text] = true
 		return 2, nil
+	case i+3 < len(tokens) && tokens[i+1].Is("SECTION") && isNumber(tokens[i+2].Text) && tokens[i+3].Kind == Period:
+		s.section, s.header = t.Text, &tokens[i]
+		s.procedures[t.Text] = true
+		return 3, nil
 	case i+1 < len(tokens) && tokens[i+1].Kind == Period:
 		if s.procedures[t.Text] {
 			return 0, fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
@@ -583,7 +714,21 @@ func (c *cursor) expect(word string) error {
 	return nil
 }
 
+// qualified reads a name and passes over the OF or IN names that qualify
+// it, which the name alone is enough to find in the programs read.
+func (c *cursor) qualified() string {
+	name := c.next().Text
+	for !c.done() && (c.peek().Is("OF") || c.peek().Is("IN")) {
+		c.next()
+		c.next()
+	}
+	return name
+}
+
 func (c *cursor) number() (int, error) {
+	if c.done() {
+		return 0, fmt.Errorf("%s: expected a number, found the end of the entry", c.tokens[len(c.tokens)-1].Pos)
+	}
 	t := c.next()
 	n, err := strconv.Atoi(t.Text)
 	if t.Kind != Word || err != nil {

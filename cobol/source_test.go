@@ -182,3 +182,26 @@ move "a *> b" to ws-text *> not code
 		t.Error("in free format, the first token of each line, and only it, is where a header can start")
 	}
 }
+
+// A number continued across lines, its decimal point on a line of its own,
+// is one number.
+func TestContinuedNumber(t *testing.T) {
+	source := "" +
+		"           MOVE     -\n" +
+		"      -             9\n" +
+		"      -             9\n" +
+		"      -             .\n" +
+		"      -             7\n" +
+		"      -             7 TO CONT-B.\n"
+	tokens, err := Lex("test", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, tok := range tokens {
+		got = append(got, tok.String())
+	}
+	if want := "MOVE -99.77 TO CONT-B ."; strings.Join(got, " ") != want {
+		t.Errorf("tokens %q, want %q", strings.Join(got, " "), want)
+	}
+}

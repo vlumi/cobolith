@@ -21,14 +21,15 @@ import (
 func main() {
 	suite := flag.String("suite", "", "the suite's population file, newcob.val")
 	out := flag.String("out", "", "the report to write")
+	prepared := flag.String("prepared", "", "a directory to leave the prepared programs in, for a look at why one fails")
 	flag.Parse()
-	if err := run(*suite, *out); err != nil {
+	if err := run(*suite, *out, *prepared); err != nil {
 		fmt.Fprintln(os.Stderr, "conformance:", err)
 		os.Exit(1)
 	}
 }
 
-func run(suite, out string) error {
+func run(suite, out, prepared string) error {
 	f, err := os.Open(suite)
 	if err != nil {
 		return err
@@ -38,11 +39,15 @@ func run(suite, out string) error {
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "ccvs85")
-	if err != nil {
+	dir := prepared
+	if dir == "" {
+		if dir, err = os.MkdirTemp("", "ccvs85"); err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
 	programs, err := extract(members, dir)
 	if err != nil {
 		return err
@@ -80,13 +85,18 @@ func extract(members []member, dir string) ([]string, error) {
 	return programs, nil
 }
 
-// read reads a program as cobolith does: lexed and parsed, its copybooks
-// from the suite's library, and its records laid out in IBM COBOL.
+// read reads a source file as cobolith does: lexed and parsed, its
+// copybooks from the suite's library, and the records of each of its
+// programs laid out in IBM COBOL.
 func read(dir, name string) error {
-	p, err := cobol.ReadProgram(filepath.Join(dir, name+".CBL"), []string{dir})
+	programs, err := cobol.ReadPrograms(filepath.Join(dir, name+".CBL"), []string{dir})
 	if err != nil {
 		return err
 	}
-	_, err = layout.Program(p, cobol.IBM)
-	return err
+	for _, p := range programs {
+		if _, err := layout.Program(p, cobol.IBM); err != nil {
+			return err
+		}
+	}
+	return nil
 }

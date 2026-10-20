@@ -109,15 +109,20 @@ func parseCopy(tokens []Token, i int) (string, []replacement, int, error) {
 }
 
 // operand reads one operand of a REPLACING phrase starting at tokens[j]: a
-// pseudo-text between == delimiters, or a single word or literal. It
-// returns the operand's tokens and the index after it.
+// pseudo-text between == delimiters, a literal, or a word with the OF or
+// IN names that qualify it. It returns the operand's tokens and the index
+// after it.
 func operand(tokens []Token, j int) ([]Token, int, error) {
 	if j >= len(tokens) {
 		return nil, j, fmt.Errorf("COPY REPLACING ends early")
 	}
 	first := tokens[j]
 	if first.Kind != Word || !strings.HasPrefix(first.Text, "==") {
-		return []Token{first}, j + 1, nil
+		end := j + 1
+		for first.Kind == Word && end+1 < len(tokens) && (tokens[end].Is("OF") || tokens[end].Is("IN")) {
+			end += 2
+		}
+		return tokens[j:end], end, nil
 	}
 	var text []Token
 	for k := j; k < len(tokens); k++ {

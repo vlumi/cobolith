@@ -64,7 +64,7 @@ func Records(entries []*cobol.DataEntry, dialect cobol.Dialect) ([]*Field, error
 		return nil, err
 	}
 	for _, record := range records {
-		if err := place(record, 1, "DISPLAY", dialect); err != nil {
+		if err := place(record, 1, "DISPLAY", sign{}, dialect); err != nil {
 			return nil, err
 		}
 	}
@@ -124,21 +124,30 @@ func newField(e *cobol.DataEntry) *Field {
 	}
 }
 
+// sign is where a SIGN clause puts a signed display number's sign, and
+// whether in a byte of its own.
+type sign struct {
+	position string
+	separate bool
+}
+
 // place sets the position and length of f, starting at start, and of
-// everything under it. A field without a usage takes its group's.
-func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
+// everything under it. A field without a usage takes its group's, and a
+// signed display number without a SIGN clause its group's SIGN.
+func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dialect) error {
 	f.Start = start
 	if f.Usage == "" {
 		f.Usage = usage
 	}
 	if len(f.Children) == 0 {
-		return f.placeElementary(dialect)
+		return f.placeElementary(groupSign, dialect)
 	}
 	if f.Picture != "" {
 		return fmt.Errorf("%s: group %s has a picture", f.Pos, f.Name)
 	}
 	if f.Sign != "" {
-		return fmt.Errorf("%s: group %s: SIGN on a group is not supported yet", f.Pos, f.Name)
+		groupSign = sign{f.Sign, f.SignSeparate}
+		f.Sign, f.SignSeparate = "", false
 	}
 	f.Category = Group
 	next, end := start, start
@@ -151,7 +160,7 @@ func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
 			}
 			childStart = target.Start
 		}
-		if err := place(child, childStart, f.Usage, dialect); err != nil {
+		if err := place(child, childStart, f.Usage, groupSign, dialect); err != nil {
 			return err
 		}
 		if child.Redefines == "" {
@@ -163,7 +172,17 @@ func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
 	return nil
 }
 
-func (f *Field) placeElementary(dialect cobol.Dialect) error {
+func (f *Field) placeElementary(groupSign sign, dialect cobol.Dialect) error {
+	if f.Usage == "INDEX" {
+		switch {
+		case f.Picture != "":
+			return fmt.Errorf("%s: %s: USAGE INDEX takes no picture", f.Pos, f.Name)
+		case dialect.IndexSize == 0:
+			return fmt.Errorf("%s: %s: the size of USAGE INDEX in %s COBOL depends on more than the dialect", f.Pos, f.Name, dialect.Title)
+		}
+		f.Length, f.Category = dialect.IndexSize, Index
+		return nil
+	}
 	if size, ok := floatSizes[f.Usage]; ok {
 		if f.Picture != "" {
 			return fmt.Errorf("%s: %s: %s takes no picture", f.Pos, f.Name, f.Usage)
@@ -185,6 +204,9 @@ func (f *Field) placeElementary(dialect cobol.Dialect) error {
 	f.Category = p.category
 	if p.category == Numeric {
 		f.Digits, f.Scale, f.Signed = p.digits, p.scale, p.signed
+	}
+	if f.Sign == "" && f.Signed && f.Usage == "DISPLAY" {
+		f.Sign, f.SignSeparate = groupSign.position, groupSign.separate
 	}
 	if f.Sign != "" {
 		if !f.Signed || f.Usage != "DISPLAY" {

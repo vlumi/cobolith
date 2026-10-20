@@ -233,7 +233,7 @@ func TestConditionNames(t *testing.T) {
 func TestStatementErrors(t *testing.T) {
 	procedures := map[string]bool{"P": true}
 	for _, source := range []string{
-		"ALTER P TO PROCEED TO P.",
+		"EXAMINE WS-A TALLYING ALL SPACES.",
 		"INSPECT WS-A TALLYING WS-B FOR 'X'.",
 		"MOVE WS-A WS-B.",
 		"PERFORM UNTIL WS-A = 1 CONTINUE.",

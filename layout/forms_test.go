@@ -79,7 +79,14 @@ var dataForms = []struct{ entries, ibm, mf string }{
 05 A 1+4 numeric COMP-1
 05 B 5+8 numeric COMP-2
 `, ""},
-	{"01 R.\n 05 A USAGE INDEX.", "error: FORMS.cbl:7: A: USAGE INDEX is not supported yet", ""},
+	{"01 R.\n 05 A USAGE INDEX.", `01 R 1+4 group DISPLAY
+05 A 1+4 index INDEX
+`, "error: FORMS.cbl:7: A: the size of USAGE INDEX in Micro Focus COBOL depends on more than the dialect"},
+	{"01 R SIGN LEADING SEPARATE.\n 05 A PIC S9(3).\n 05 B PIC 9(3).\n 05 C PIC S9(3) SIGN TRAILING.", `01 R 1+10 group DISPLAY
+05 A 1+4 numeric DISPLAY
+05 B 5+3 numeric DISPLAY
+05 C 8+3 numeric DISPLAY
+`, ""},
 	{"01 R.\n 05 A PIC 9(2) COMP.\n 05 B PIC S9(5) COMP.\n 05 C PIC 9(7) BINARY.", `01 R 1+10 group DISPLAY
 05 A 1+2 numeric COMP
 05 B 3+4 numeric COMP

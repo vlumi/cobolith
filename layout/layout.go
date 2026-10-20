@@ -183,8 +183,9 @@ type sign struct {
 }
 
 // place sets the position and length of f, starting at start, and of
-// everything under it. A field without a usage takes its group's, and a
-// signed display number without a SIGN clause its group's SIGN.
+// everything under it. A field without a usage takes its group's, a
+// signed display number without a SIGN clause its group's SIGN, and an
+// item under a SYNCHRONIZED group is synchronized.
 func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dialect) error {
 	f.Start = start
 	if f.Usage == "" {
@@ -200,7 +201,9 @@ func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dial
 		return fmt.Errorf("%s: group %s has a picture", f.Pos, f.Name)
 	}
 	if f.Synchronized {
-		return fmt.Errorf("%s: group %s: SYNCHRONIZED is for elementary items", f.Pos, f.Name)
+		for _, child := range f.Children {
+			child.Synchronized = true
+		}
 	}
 	if f.Sign != "" {
 		groupSign = sign{f.Sign, f.SignSeparate}
@@ -225,7 +228,12 @@ func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dial
 		}
 		end = max(end, child.Start+child.Size())
 	}
-	f.Length = end - start
+	if first := f.Children[0]; first.Start > start {
+		// The slack bytes that aligned the group's first item go before
+		// the group, which starts where the item does.
+		f.Start = first.Start
+	}
+	f.Length = end - f.Start
 	if m := largestAlignment(f); f.Occurs > 0 && m > 0 && f.Length%m != 0 {
 		f.Length += m - f.Length%m
 	}

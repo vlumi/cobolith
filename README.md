@@ -28,17 +28,19 @@ Each package has an example that runs as a test.
 
 COBOL leaves some of a record's layout to the compiler, and a `cobol.Dialect` says how one lays it out, and in which encoding its source is read:
 
-| | IBM | Micro Focus |
-| --- | --- | --- |
-| Binary items: `COMP`, `COMP-4`, `COMP-5`, `BINARY` | a halfword, fullword or doubleword: 2, 4 or 8 bytes | as many bytes as the digits need, 1 to 8 |
-| `USAGE INDEX` | 4 bytes | an error: its size depends on more than the dialect |
-| Native binary, `COMP-5` | big-endian | the platform's byte order: an error in `record` |
-| Floating point, `COMP-1` and `COMP-2` | IBM hexadecimal floating point | IEEE 754 in the platform's byte order: an error in `record` |
-| `SYNCHRONIZED` | slack bytes before a binary, floating-point or index item, to a multiple of 2, 4 or 8 from the start of the record, and at the end of each occurrence of a table that holds one | an error: compiler directives decide |
+| | IBM | Micro Focus | Hitachi COBOL2002 | Fujitsu NetCOBOL |
+| --- | --- | --- | --- | --- |
+| Source and data | ASCII or EBCDIC, one byte a character | the same | Shift_JIS, read two bytes at a time | Shift_JIS, or UTF-8 in `FujitsuUnicode` |
+| National items, `PIC N` | an error | an error | 2 bytes a character | 2 bytes a character: Shift_JIS, or UTF-16 |
+| Binary items: `COMP`, `COMP-4`, `COMP-5`, `BINARY` | a halfword, fullword or doubleword: 2, 4 or 8 bytes | as many bytes as the digits need, 1 to 8 | 2, 4 or 8 bytes | 2, 4 or 8 bytes |
+| `USAGE INDEX` | 4 bytes | an error: its size depends on more than the dialect | an error | an error: 4 or 8 bytes by the platform |
+| Native binary, `COMP-5` | big-endian | the platform's byte order: an error in `record` | an error | little-endian |
+| Floating point, `COMP-1` and `COMP-2` | IBM hexadecimal floating point | IEEE 754 in the platform's byte order: an error in `record` | an error | IEEE 754, little-endian |
+| `SYNCHRONIZED` | slack bytes before a binary, floating-point or index item, to a multiple of 2, 4 or 8 from the start of the record, and at the end of each occurrence of a table that holds one | an error: compiler directives decide | an error | as IBM |
 
-And Hitachi COBOL2002, the first of the Japanese dialects: its source and data are in Shift_JIS, which the lexer reads two bytes at a time, so Japanese names and literals stay whole; a national item, `PIC N`, takes two bytes a character, as the manual says and opensource COBOL, the Japanese GnuCOBOL fork, lays it out; its binary items are sized as IBM's. Its index items, `SYNCHRONIZED`, and native binary's byte order are not read yet. Fujitsu NetCOBOL waits on its Language Reference, which Fujitsu's site does not serve to a program.
+The Japanese dialects' source and data are in Shift_JIS, which the lexer reads two bytes at a time, so Japanese names and literals stay whole; a national item takes two bytes a character, as the manuals say and opensource COBOL, the Japanese GnuCOBOL fork, lays it out. NetCOBOL's `ENCODE(UTF8)`, the default in a Unicode locale, keeps alphanumeric data in UTF-8 and national data in UTF-16: `cobol.FujitsuUnicode`. Its `ENCODE(UTF8,UTF32)`, its variable-length source format with no right margin, and the Japanese dialects' index items are not read.
 
-IBM COBOL's slack bytes are as IBM documents them, with IBM's own example among the tests; GnuCOBOL's `-std=ibm` lays out the same records alike, but aligns a table's items from the table's start rather than the record's. Packed decimal and display numbers are laid out alike in both dialects, and so are `COMP-1` and `COMP-2`, four and eight bytes, and binary's big-endian order.
+IBM COBOL's slack bytes are as IBM documents them, with IBM's own example among the tests; GnuCOBOL's `-std=ibm` lays out the same records alike, but aligns a table's items from the table's start rather than the record's. Packed decimal and display numbers are laid out alike in every dialect, and so are `COMP-1` and `COMP-2`, four and eight bytes.
 
 ## What it has been run against
 
@@ -53,7 +55,7 @@ Each is an error that says so, with the file and line:
 - `USAGE POINTER`, whose size depends on the platform.
 - National items, `PIC N`, in IBM and Micro Focus COBOL, whose sizes are not verified yet; and a picture of `P` alone.
 - The report writer and the communication module.
-- Dialects other than IBM, Micro Focus and Hitachi COBOL, and the additions of the 2002 and 2014 standards beyond those the two share; `EXEC SQL` and `EXEC CICS`.
+- Dialects other than IBM, Micro Focus, Hitachi and Fujitsu COBOL, and the additions of the 2002 and 2014 standards beyond those the two share; `EXEC SQL` and `EXEC CICS`.
 
 ## Acknowledgment
 

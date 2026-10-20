@@ -193,3 +193,27 @@ func entriesOf(t *testing.T, source string) []*cobol.DataEntry {
 	}
 	return entries
 }
+
+// Fujitsu NetCOBOL lays out national items at two bytes, binary items as
+// IBM does, and SYNCHRONIZED on a group as on each of its items.
+func TestFujitsuLayout(t *testing.T) {
+	source := "       01  R.\n           05  A PIC X.\n           05  G SYNC.\n               10  B PIC S9(4) COMP.\n               10  C PIC S9(9) COMP.\n" +
+		"           05  D PIC N(2).\n           05  E PIC S9(11) COMP SYNC.\n"
+	records, err := Records(entriesOf(t, source), cobol.Fujitsu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	var visit func(f *Field)
+	visit = func(f *Field) {
+		got = append(got, fmt.Sprintf("%s %d+%d", f.Name, f.Start, f.Length))
+		for _, child := range f.Children {
+			visit(child)
+		}
+	}
+	visit(records[0])
+	want := []string{"R 1+20", "A 1+1", "G 3+6", "B 3+2", "C 5+4", "D 9+4", "E 13+8"}
+	if !slices.Equal(got, want) {
+		t.Errorf("fields %q, want %q", got, want)
+	}
+}

@@ -129,6 +129,12 @@ var dataForms = []struct{ entries, ibm, mf string }{
 10 COMP-HOURS 9+2 numeric COMP
 10 COMP-NAME 11+5 alphanumeric DISPLAY
 `, "error: FORMS.cbl:10: COMP-PAY: in Micro Focus COBOL, where SYNCHRONIZED puts an item depends on compiler directives"},
+	{"01 R.\n 05 FIELD-M PIC X(5).\n 05 FIELD-N PIC XX.\n 05 FIELD-O.\n  10 FIELD-P PIC S9(6) COMP SYNC.", `01 R 1+12 group DISPLAY
+05 FIELD-M 1+5 alphanumeric DISPLAY
+05 FIELD-N 6+2 alphanumeric DISPLAY
+05 FIELD-O 9+4 group DISPLAY
+10 FIELD-P 9+4 numeric COMP
+`, "error: FORMS.cbl:10: FIELD-P: in Micro Focus COBOL, where SYNCHRONIZED puts an item depends on compiler directives"},
 	{"77 COUNTER PIC 9(4) VALUE 0.\n01 R.\n 05 A PIC X(2).\n 05 B REDEFINES A PIC 99.", `77 COUNTER 1+4 numeric DISPLAY values 0
 01 R 1+2 group DISPLAY
 05 A 1+2 alphanumeric DISPLAY

@@ -4,6 +4,17 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-20
+
+### Added
+
+- Fujitsu NetCOBOL, `cobol.Fujitsu` for `ENCODE(SJIS)` and `cobol.FujitsuUnicode` for `ENCODE(UTF8)`: source and data in Shift_JIS or UTF-8, national items two bytes a character in both, binary items of 2, 4 or 8 bytes, native binary and IEEE floating point little-endian, and `SYNCHRONIZED` as in IBM COBOL.
+- `SYNCHRONIZED` on a group synchronizes each of its items.
+
+### Fixed
+
+- The slack bytes that align the first item of a group go before the group, as IBM's example of them shows, so the group starts where its first item does; they were counted in the group.
+
 ## [0.6.0] - 2026-10-20
 
 ### Added
@@ -67,7 +78,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/vlumi/cobolith/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vlumi/cobolith/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vlumi/cobolith/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vlumi/cobolith/compare/v0.3.0...v0.4.0

@@ -118,11 +118,54 @@ func ReadProgram(path string, copybookDirs []string) (*Program, error) {
 }
 
 // Parse parses the tokens of a program, and of the programs nested in it.
+// A source file of more than one program is ParseAll's.
 func Parse(path string, tokens []Token) (*Program, error) {
-	own, nested, err := splitNested(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+	p, rest, err := parseFirst(path, tokens)
+	if err == nil && len(rest) > 0 {
+		err = fmt.Errorf("%s: %s: a second program after END PROGRAM, which ParseAll reads", path, rest[0].Pos)
 	}
+	return p, err
+}
+
+// ReadPrograms reads and parses every program of a source file, its
+// copybooks expanded: those it holds one after the other, each ended by
+// END PROGRAM, each with the programs nested in it.
+func ReadPrograms(path string, copybookDirs []string) ([]*Program, error) {
+	tokens, err := Read(path, copybookDirs)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAll(path, tokens)
+}
+
+// ParseAll parses the tokens of every program of a source file, in order.
+func ParseAll(path string, tokens []Token) ([]*Program, error) {
+	var programs []*Program
+	for len(tokens) > 0 {
+		p, rest, err := parseFirst(path, tokens)
+		if err != nil {
+			return nil, err
+		}
+		programs = append(programs, p)
+		tokens = rest
+	}
+	return programs, nil
+}
+
+// parseFirst parses the first program of the tokens, and returns the
+// tokens after it.
+func parseFirst(path string, tokens []Token) (*Program, []Token, error) {
+	own, nested, rest, err := splitNested(tokens)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	p, err := parseProgram(path, tokens, own, nested)
+	return p, rest, err
+}
+
+// parseProgram parses a program from its own tokens, and the programs
+// nested in it from theirs; its comment is that before its first token.
+func parseProgram(path string, tokens, own []Token, nested [][]Token) (*Program, error) {
 	divisions, err := splitDivisions(own)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
@@ -161,8 +204,8 @@ func Parse(path string, tokens []Token) (*Program, error) {
 // splitNested separates a program's own tokens from those of the programs
 // nested in it, each from its IDENTIFICATION DIVISION through the END
 // PROGRAM that names it. The program's own END PROGRAM, if it has one,
-// ends it.
-func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
+// ends it, and the rest are the tokens after it.
+func splitNested(tokens []Token) (own []Token, nested [][]Token, rest []Token, err error) {
 	var open []string // the nested programs not yet ended, innermost last
 	start := 0
 	for i := 0; i < len(tokens); i++ {
@@ -179,13 +222,10 @@ func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
 				name = tokens[i+2].Text
 			}
 			if len(open) == 0 {
-				if end+1 < len(tokens) {
-					return nil, nil, fmt.Errorf("%s: %s after END PROGRAM", tokens[end+1].Pos, tokens[end+1])
-				}
-				return own, nested, nil
+				return own, nested, tokens[end+1:], nil
 			}
 			if innermost := open[len(open)-1]; name != innermost {
-				return nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
+				return nil, nil, nil, fmt.Errorf("%s: END PROGRAM %s where %s has not ended", tokens[i].Pos, name, innermost)
 			}
 			if open = open[:len(open)-1]; len(open) == 0 {
 				nested = append(nested, tokens[start:end+1])
@@ -196,9 +236,9 @@ func splitNested(tokens []Token) (own []Token, nested [][]Token, err error) {
 		}
 	}
 	if len(open) > 0 {
-		return nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
+		return nil, nil, nil, fmt.Errorf("%s: no END PROGRAM %s", tokens[start].Pos, open[len(open)-1])
 	}
-	return own, nested, nil
+	return own, nested, nil, nil
 }
 
 // programID is the PROGRAM-ID of the program whose IDENTIFICATION

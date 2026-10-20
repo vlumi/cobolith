@@ -528,3 +528,21 @@ func TestSectionsAndQualifiedReplacing(t *testing.T) {
 		t.Errorf("section %q, statement %q, global %v", p.Paragraphs[0].Section, move.Text, p.WorkingStorage[0].Global)
 	}
 }
+
+// A source file of programs one after the other is ParseAll's, each ended
+// by END PROGRAM; Parse reads one.
+func TestProgramsOneAfterTheOther(t *testing.T) {
+	one := "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. %s.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           GOBACK.\n       END PROGRAM %s.\n"
+	source := fmt.Sprintf(one, "FIRST", "FIRST") + fmt.Sprintf(one, "SECOND", "SECOND")
+	tokens, err := Lex("TWO.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	programs, err := ParseAll("TWO.cbl", tokens)
+	if err != nil || len(programs) != 2 || programs[0].ID != "FIRST" || programs[1].ID != "SECOND" {
+		t.Errorf("programs %v, %v", programs, err)
+	}
+	if _, err := Parse("TWO.cbl", tokens); err == nil {
+		t.Error("Parse read two programs as one")
+	}
+}

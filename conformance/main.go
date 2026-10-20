@@ -85,13 +85,18 @@ func extract(members []member, dir string) ([]string, error) {
 	return programs, nil
 }
 
-// read reads a program as cobolith does: lexed and parsed, its copybooks
-// from the suite's library, and its records laid out in IBM COBOL.
+// read reads a source file as cobolith does: lexed and parsed, its
+// copybooks from the suite's library, and the records of each of its
+// programs laid out in IBM COBOL.
 func read(dir, name string) error {
-	p, err := cobol.ReadProgram(filepath.Join(dir, name+".CBL"), []string{dir})
+	programs, err := cobol.ReadPrograms(filepath.Join(dir, name+".CBL"), []string{dir})
 	if err != nil {
 		return err
 	}
-	_, err = layout.Program(p, cobol.IBM)
-	return err
+	for _, p := range programs {
+		if _, err := layout.Program(p, cobol.IBM); err != nil {
+			return err
+		}
+	}
+	return nil
 }

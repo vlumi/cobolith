@@ -76,7 +76,9 @@ type FileDescription struct {
 // Paragraph is a paragraph of the procedure division: the tokens of its
 // body and the statements they make. Paragraphs before the first section
 // header have no section. A declarative paragraph is one of the
-// DECLARATIVES, which nothing performs or falls into.
+// DECLARATIVES, which nothing performs or falls into. The statements of a
+// procedure division before its first paragraph or section are a
+// paragraph with no name.
 type Paragraph struct {
 	Name        string
 	Section     string
@@ -487,10 +489,10 @@ func (s *splitter) take(tokens []Token, i int) (int, error) {
 	if s.header != nil {
 		s.paragraph(s.section, *s.header)
 	}
-	paragraphs := s.program.Paragraphs
-	if len(paragraphs) == 0 {
-		return 0, fmt.Errorf("%s: statements before the first paragraph are not supported yet", t.Pos)
+	if len(s.program.Paragraphs) == 0 {
+		s.paragraph("", t)
 	}
+	paragraphs := s.program.Paragraphs
 	paragraphs[len(paragraphs)-1].Body = append(paragraphs[len(paragraphs)-1].Body, t)
 	return 0, nil
 }

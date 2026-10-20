@@ -351,3 +351,33 @@ end program outer.
 		}
 	}
 }
+
+// Statements before a procedure division's first paragraph are a paragraph
+// with no name.
+func TestStatementsBeforeTheFirstParagraph(t *testing.T) {
+	source := `>>SOURCE FORMAT IS FREE
+IDENTIFICATION DIVISION.
+PROGRAM-ID. FIRST.
+PROCEDURE DIVISION.
+    DISPLAY 'START'
+    PERFORM LATER-PARA
+    STOP RUN.
+LATER-PARA.
+    DISPLAY 'LATER'.
+`
+	tokens, err := Lex("FIRST.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("FIRST.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, para := range p.Paragraphs {
+		got = append(got, fmt.Sprintf("%q %d", para.Name, len(para.Statements)))
+	}
+	if want := []string{`"" 3`, `"LATER-PARA" 1`}; !slices.Equal(got, want) {
+		t.Errorf("paragraphs %q, want %q", got, want)
+	}
+}

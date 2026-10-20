@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
 ### Added
 
 - A paragraph name may repeat in another section. `ProcedureRef` has the `Section` and `ThruSection` of the paragraphs it names, as written after `OF` or `IN`, or as the program resolves a name alone: to its own section's paragraph by that name, or the only one. `Span` finds the paragraph of that section. A name alone that more than one other section has is an error. Of NIST's COBOL-85 suite, 388 programs of 459 are read, from 383.
@@ -32,6 +34,7 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/vlumi/cobolith/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/vlumi/cobolith/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vlumi/cobolith/releases/tag/v0.1.0

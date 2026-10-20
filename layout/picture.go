@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 // Categories of elementary items, by their picture.

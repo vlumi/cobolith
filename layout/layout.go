@@ -6,7 +6,7 @@ package layout
 import (
 	"fmt"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 // Field is a group or elementary item of a record.

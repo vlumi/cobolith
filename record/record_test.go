@@ -5,19 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 func acctMaster(t *testing.T) *Layout {
 	t.Helper()
-	l, err := FromCopybook("../../pangaea/copybooks/ACCTMAST.cpy", nil, "ACCT-MASTER-RECORD", cobol.IBM)
+	l, err := FromCopybook("testdata/ACCOUNT.cpy", nil, "ACCT-MASTER-RECORD", cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return l
 }
 
-// A record from the daily fixture: account 10006, balance -150.00.
+// An account record: account 10006, balance -150.00.
 const eohippus = "000001000600000105EOHIPPUS ELLA       CO2020090920261015000000001500}000030000                      "
 
 func TestRead(t *testing.T) {
@@ -89,12 +89,12 @@ func TestErrors(t *testing.T) {
 }
 
 func TestNamesUsedTwiceCannotBeLookedUp(t *testing.T) {
-	l, err := FromCopybook("../../pangaea/copybooks/TRANREC.cpy", nil, "TRAN-RECORD", cobol.IBM)
+	l, err := FromCopybook("testdata/FILLERS.cpy", nil, "FILLERS-RECORD", cobol.IBM)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.Text(l.Blank(), "FILLER"); err == nil {
-		t.Error("looked up FILLER, which TRAN-RECORD has three of")
+		t.Error("looked up FILLER, which FILLERS-RECORD has three of")
 	}
 }
 

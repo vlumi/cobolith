@@ -3,7 +3,7 @@ package layout
 import (
 	"testing"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 func TestParsePicture(t *testing.T) {

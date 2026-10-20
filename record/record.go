@@ -14,8 +14,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/vlumi/copal/bedrock/cobol"
-	"github.com/vlumi/copal/bedrock/layout"
+	"github.com/vlumi/cobolith/cobol"
+	"github.com/vlumi/cobolith/layout"
 )
 
 // Layout is one record's layout, with its fields by name.

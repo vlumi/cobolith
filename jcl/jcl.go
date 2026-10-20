@@ -1,7 +1,7 @@
 // Package jcl parses job network files in a small subset of IBM JCL: a JOB
 // statement, EXEC statements running programs, and DD statements binding a
-// program's file names to datasets or to the job's output. Pangaea's runner
-// executes them, and the survey reads them to draw the job network.
+// program's file names to datasets or to the job's output: what runs a
+// job needs, and what draws the network of jobs and their datasets.
 package jcl
 
 import (
@@ -76,8 +76,8 @@ const (
 // for new datasets, LRECL), to the job's output (Sysout), or to nothing
 // (Dummy: reads find no records, writes are discarded).
 //
-// DD * is InStream: the job's in-stream data, which Pangaea's jobs do not
-// carry in their text; whoever submits the job supplies it.
+// DD * is InStream: the job's in-stream data, which a job's text may not
+// carry, its lines being no statements; whoever runs the job supplies it.
 //
 // RECORG=KS makes the dataset Indexed, a key-sequenced dataset whose
 // records a program reads and writes by key. Its record length is given as
@@ -400,8 +400,8 @@ func (dd DD) check() error {
 	return nil
 }
 
-// parseDCB reads the record length from DCB=(RECFM=FB,LRECL=n). Pangaea's
-// datasets are all fixed-length records without delimiters.
+// parseDCB reads the record length from DCB=(RECFM=FB,LRECL=n): fixed-length
+// records without delimiters, the only record format read.
 func parseDCB(value string) (int, error) {
 	lrecl := 0
 	for _, attribute := range splitOperands(unparenthesize(value)) {

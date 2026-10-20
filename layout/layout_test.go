@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 func entries(t *testing.T, source string) []*cobol.DataEntry {

@@ -3,7 +3,7 @@ package layout
 import (
 	"slices"
 
-	"github.com/vlumi/copal/bedrock/cobol"
+	"github.com/vlumi/cobolith/cobol"
 )
 
 // ProgramRecords are a program's records laid out: those of each file, in

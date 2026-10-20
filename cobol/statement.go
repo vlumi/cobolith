@@ -511,7 +511,7 @@ func (p *statementParser) arithmetic(s *Statement) error {
 			return err
 		}
 	}
-	s.Reads = append(reads, updated...)
+	s.Reads = slices.Concat(reads, updated)
 	if p.optional("GIVING") {
 		if s.Writes, err = p.operands(); err != nil {
 			return err
@@ -1333,11 +1333,12 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string, ph
 			p.optional("KEY")
 			kind = "INVALID KEY"
 		case p.optional("ON") || p.peek().Is("SIZE") || p.peek().Is("OVERFLOW") || p.peek().Is("EXCEPTION"):
-			if p.optional("EXCEPTION") {
+			switch {
+			case p.optional("EXCEPTION"):
 				kind = "ON EXCEPTION"
-			} else if p.optional("OVERFLOW") {
+			case p.optional("OVERFLOW"):
 				kind = "ON OVERFLOW"
-			} else {
+			default:
 				if err := p.expect("SIZE"); err != nil {
 					return err
 				}

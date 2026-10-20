@@ -24,6 +24,9 @@ type Dialect struct {
 	// HexFloat is whether COMP-1 and COMP-2 hold IBM hexadecimal floating
 	// point; otherwise they hold IEEE 754, in the native byte order.
 	HexFloat bool
+	// Synchronizes is whether the dialect's rules say where SYNCHRONIZED
+	// items go; otherwise compiler directives do.
+	Synchronizes bool
 }
 
 var (
@@ -31,7 +34,7 @@ var (
 	// fullword or a doubleword, and an index a fullword; native binary is
 	// big-endian, as the mainframe is, and floating point hexadecimal.
 	IBM = Dialect{Name: "ibm", Title: "IBM", BinarySizes: []int{2, 4, 8}, IndexSize: 4,
-		NativeOrder: binary.BigEndian, HexFloat: true}
+		NativeOrder: binary.BigEndian, HexFloat: true, Synchronizes: true}
 	// MicroFocus is Micro Focus COBOL: a binary item takes as many bytes
 	// as its digits need; native binary and floating point are in the
 	// byte order of the platform it runs on.

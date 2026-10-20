@@ -56,7 +56,9 @@ func layoutOf(t *testing.T, entries string, dialect cobol.Dialect) (string, erro
 
 // dataForms are data description entries in forms the specimens do not all
 // use, each with its layout in IBM COBOL, and in Micro Focus COBOL where
-// it differs, or the error it is not read with.
+// it differs, or the error it is not read with. WORK-RECORD is IBM's own
+// example of slack bytes in a table: two before COMP-PAY, counted from
+// the start of the record, and two at the end of each occurrence.
 var dataForms = []struct{ entries, ibm, mf string }{
 	{"01 R.\n 05 A PIC S9(5)V99.\n 05 B PIC S9(5)V99 COMP-3.\n 05 C PIC 9(4) COMP.\n 05 D PIC S9(9) BINARY.\n 05 E PIC 9(18) COMP-5.", `01 R 1+25 group DISPLAY
 05 A 1+7 numeric DISPLAY
@@ -111,7 +113,22 @@ var dataForms = []struct{ entries, ibm, mf string }{
 05 A 1+10 alphanumeric DISPLAY
 05 B 11+5 numeric DISPLAY
 `, ""},
-	{"01 R.\n 05 A PIC S9(4) COMP SYNCHRONIZED.", "error: FORMS.cbl:7: A: SYNCHRONIZED is not supported yet", ""},
+	{"01 R.\n 05 A PIC X.\n 05 B PIC S9(4) COMP SYNC.\n 05 C PIC X.\n 05 D PIC S9(11) COMP SYNC.\n 05 E COMP-2 SYNC.\n 05 F PIC S9(3) COMP-3 SYNC.", `01 R 1+26 group DISPLAY
+05 A 1+1 alphanumeric DISPLAY
+05 B 3+2 numeric COMP
+05 C 5+1 alphanumeric DISPLAY
+05 D 9+8 numeric COMP
+05 E 17+8 numeric COMP-2
+05 F 25+2 numeric COMP-3
+`, "error: FORMS.cbl:8: B: in Micro Focus COBOL, where SYNCHRONIZED puts an item depends on compiler directives"},
+	{"01 WORK-RECORD.\n 05 WORK-CODE PIC X.\n 05 COMP-TABLE OCCURS 10 TIMES.\n  10 COMP-TYPE PIC X.\n  10 COMP-PAY PIC S9(4)V99 COMP SYNC.\n  10 COMP-HOURS PIC S9(3) COMP SYNC.\n  10 COMP-NAME PIC X(5).", `01 WORK-RECORD 1+161 group DISPLAY
+05 WORK-CODE 1+1 alphanumeric DISPLAY
+05 COMP-TABLE 2+160 group DISPLAY occurs 10
+10 COMP-TYPE 2+1 alphanumeric DISPLAY
+10 COMP-PAY 5+4 numeric COMP
+10 COMP-HOURS 9+2 numeric COMP
+10 COMP-NAME 11+5 alphanumeric DISPLAY
+`, "error: FORMS.cbl:10: COMP-PAY: in Micro Focus COBOL, where SYNCHRONIZED puts an item depends on compiler directives"},
 	{"77 COUNTER PIC 9(4) VALUE 0.\n01 R.\n 05 A PIC X(2).\n 05 B REDEFINES A PIC 99.", `77 COUNTER 1+4 numeric DISPLAY values 0
 01 R 1+2 group DISPLAY
 05 A 1+2 alphanumeric DISPLAY

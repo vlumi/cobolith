@@ -28,6 +28,9 @@ type Field struct {
 	// SIGN clause says; without one, it is overpunched on the last digit.
 	Sign         string
 	SignSeparate bool
+	// Synchronized is whether the item is aligned on its natural boundary,
+	// slack bytes before it, as its SYNCHRONIZED clause asks.
+	Synchronized bool
 	Redefines    string
 	// Occurs is the number of occurrences, the maximum when it depends on
 	// another field; 0 for a field that does not repeat.
@@ -113,6 +116,7 @@ func newField(e *cobol.DataEntry) *Field {
 		Usage:        e.Usage,
 		Sign:         e.Sign,
 		SignSeparate: e.SignSeparate,
+		Synchronized: e.Synchronized,
 		Redefines:    e.Redefines,
 		Occurs:       e.Occurs,
 		OccursMin:    e.OccursMin,
@@ -140,10 +144,16 @@ func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dial
 		f.Usage = usage
 	}
 	if len(f.Children) == 0 {
-		return f.placeElementary(groupSign, dialect)
+		if err := f.placeElementary(groupSign, dialect); err != nil {
+			return err
+		}
+		return f.synchronize(dialect)
 	}
 	if f.Picture != "" {
 		return fmt.Errorf("%s: group %s has a picture", f.Pos, f.Name)
+	}
+	if f.Synchronized {
+		return fmt.Errorf("%s: group %s: SYNCHRONIZED is for elementary items", f.Pos, f.Name)
 	}
 	if f.Sign != "" {
 		groupSign = sign{f.Sign, f.SignSeparate}
@@ -164,11 +174,63 @@ func place(f *Field, start int, usage string, groupSign sign, dialect cobol.Dial
 			return err
 		}
 		if child.Redefines == "" {
-			next = childStart + child.Size()
+			next = child.Start + child.Size()
 		}
-		end = max(end, childStart+child.Size())
+		end = max(end, child.Start+child.Size())
 	}
 	f.Length = end - start
+	if m := largestAlignment(f); f.Occurs > 0 && m > 0 && f.Length%m != 0 {
+		f.Length += m - f.Length%m
+	}
+	return nil
+}
+
+// alignment is the boundary a synchronized item is aligned on, from the
+// start of its record, in IBM COBOL: 2 bytes for a binary item of four
+// digits or fewer, 4 for one of more and for COMP-1 and an index, 8 for
+// COMP-2; 0, none, for an item not synchronized, and for display and
+// packed decimal, which SYNCHRONIZED does not move.
+func alignment(f *Field) int {
+	if !f.Synchronized {
+		return 0
+	}
+	switch f.Usage {
+	case "COMP", "COMP-5":
+		if f.Digits <= 4 {
+			return 2
+		}
+		return 4
+	case "COMP-1", "INDEX":
+		return 4
+	case "COMP-2":
+		return 8
+	}
+	return 0
+}
+
+// largestAlignment is the largest alignment of the items in a group: each
+// occurrence of a table of it is padded to a multiple of it, so that the
+// items of the next are aligned too.
+func largestAlignment(f *Field) int {
+	m := alignment(f)
+	for _, child := range f.Children {
+		m = max(m, largestAlignment(child))
+	}
+	return m
+}
+
+// synchronize puts slack bytes before a synchronized item, as many as
+// align it on its boundary from the start of its record.
+func (f *Field) synchronize(dialect cobol.Dialect) error {
+	if !f.Synchronized {
+		return nil
+	}
+	if !dialect.Synchronizes {
+		return fmt.Errorf("%s: %s: in %s COBOL, where SYNCHRONIZED puts an item depends on compiler directives", f.Pos, f.Name, dialect.Title)
+	}
+	if m := alignment(f); m > 0 && (f.Start-1)%m != 0 {
+		f.Start += m - (f.Start-1)%m
+	}
 	return nil
 }
 

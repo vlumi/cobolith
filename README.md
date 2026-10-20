@@ -2,7 +2,7 @@
 
 A Go library for reading COBOL: source and copybooks, the records they lay out, and the jobs that run them. It keeps where everything came from, file and line, copybook or program, and lays records out byte for byte, as the compiler would.
 
-It is pre-production, below 1.0 and not yet tagged: what it reads, it reads carefully, and what it does not read is an error, never a guess; but its API moves while the programs it is run against teach it more.
+It is pre-production, below 1.0: what it reads, it reads carefully, and what it does not read is an error, never a guess; but its API moves while the programs it is run against teach it more. [CHANGELOG.md](CHANGELOG.md) says what each release changes.
 
 ```go
 p, err := cobol.ReadProgram("ACCTUPD.cbl", []string{"copybooks"})

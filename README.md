@@ -4,14 +4,73 @@ A Go library for reading COBOL: source and copybooks, the records they lay out, 
 
 It is pre-production, below 1.0: what it reads, it reads carefully, and what it does not read is an error, never a guess; but its API moves while the programs it is run against teach it more. [CHANGELOG.md](CHANGELOG.md) says what each release changes.
 
+`go get github.com/vlumi/cobolith` and, for a program that reads an account file through a copybook:
+
 ```go
-p, err := cobol.ReadProgram("ACCTUPD.cbl", []string{"copybooks"})
-if err != nil {
-    log.Fatal(err) // file:line: what was not read
+package main
+
+import (
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/vlumi/cobolith/cobol"
+    "github.com/vlumi/cobolith/layout"
+    "github.com/vlumi/cobolith/record"
+)
+
+func main() {
+    // The program, its copybooks expanded; an error says file:line: what was not read.
+    p, err := cobol.ReadProgram("ACCTLIST.cbl", []string{"copybooks"})
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, para := range p.Paragraphs {
+        cobol.Walk(para.Statements, func(s cobol.Statement) {
+            fmt.Printf("%s %d: %s\n", para.Name, s.Pos.Line, s.Text)
+        })
+    }
+
+    // Its records, laid out as the dialect's compiler lays them out.
+    records, err := layout.Program(p, cobol.IBM)
+    if err != nil {
+        log.Fatal(err)
+    }
+    account := records.Files[0].Records[0]
+    for _, f := range account.Children {
+        fmt.Printf("%-22s %3d+%-3d %s\n", f.Name, f.Start, f.Length, f.Picture)
+    }
+
+    // A record of the file, read field by field through that layout.
+    data, err := os.ReadFile("accounts.dat")
+    if err != nil {
+        log.Fatal(err)
+    }
+    l := record.New(account, cobol.IBM)
+    name, _ := l.Text(data[:l.Length], "AM-SHORT-NAME")
+    balance, _ := l.Number(data[:l.Length], "AM-BALANCE")
+    fmt.Printf("%s: %.2f\n", name, float64(balance)/100)
 }
-records, err := layout.Program(p, cobol.IBM)
-// each field of records.WorkingStorage: name, start, length, picture, usage
 ```
+
+```text
+MAIN-PARA 17: OPEN INPUT ACCT-FILE
+MAIN-PARA 18: PERFORM UNTIL WS-EOF = 'Y'
+MAIN-PARA 19: READ ACCT-FILE
+MAIN-PARA 20: MOVE 'Y' TO WS-EOF
+MAIN-PARA 21: PERFORM ADD-BALANCE
+...
+AM-ACCT-NO               1+10  9(10)
+AM-CUST-NO              11+8   9(8)
+AM-SHORT-NAME           19+20  X(20)
+...
+AM-BALANCE              57+13  S9(11)V99
+AM-OVERDRAFT-LIMIT      70+9   9(7)V99
+FILLER                  79+22  X(22)
+EOHIPPUS ELLA: -150.00
+```
+
+`jcl.ParseFile` reads the job that runs such a program: its steps, and the datasets their DD statements bind to the program's files.
 
 ## Packages
 

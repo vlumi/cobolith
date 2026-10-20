@@ -12,7 +12,7 @@ type DataEntry struct {
 	Level   int
 	Name    string // FILLER when the entry has no name
 	Picture string
-	Usage   string // DISPLAY, COMP, COMP-3 or COMP-5
+	Usage   string // DISPLAY, COMP, COMP-1, COMP-2, COMP-3 or COMP-5
 	// Sign is where a signed display number's sign is, LEADING or
 	// TRAILING, if a SIGN clause says; SignSeparate when it takes a byte
 	// of its own rather than being overpunched on a digit.
@@ -23,9 +23,24 @@ type DataEntry struct {
 	OccursMin    int
 	DependingOn  string
 	IndexedBy    []string // the index names of an OCCURS table
-	Values       []string // VALUE literals; for level 88, ranges as "A THRU B"
-	Comment      []string // the comment lines before the entry
-	Pos          Pos
+	// Keys are the ASCENDING and DESCENDING keys of an OCCURS table, which
+	// SEARCH ALL searches by.
+	Keys   []TableKey
+	Values []string // VALUE literals; for level 88, ranges as "A THRU B"
+	// Justified is JUSTIFIED RIGHT, BlankWhenZero BLANK WHEN ZERO, External
+	// and Global the clauses of a record's scope; none changes its layout.
+	Justified     bool
+	BlankWhenZero bool
+	External      bool
+	Global        bool
+	Comment       []string // the comment lines before the entry
+	Pos           Pos
+}
+
+// TableKey is a key of an OCCURS table, and whether it is descending.
+type TableKey struct {
+	Name       string
+	Descending bool
 }
 
 // usages maps the spellings of each supported usage to one name.
@@ -41,6 +56,10 @@ var usages = map[string]string{
 	"PACKED-DECIMAL":  "COMP-3",
 	"COMP-5":          "COMP-5",
 	"COMPUTATIONAL-5": "COMP-5",
+	"COMP-1":          "COMP-1",
+	"COMPUTATIONAL-1": "COMP-1",
+	"COMP-2":          "COMP-2",
+	"COMPUTATIONAL-2": "COMP-2",
 }
 
 // ParseDataEntry parses the tokens of one data description entry, without
@@ -65,7 +84,8 @@ func ParseDataEntry(tokens []Token) (*DataEntry, error) {
 
 func isClause(word string) bool {
 	switch word {
-	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES", "SIGN", "LEADING", "TRAILING":
+	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES", "SIGN", "LEADING", "TRAILING",
+		"ASCENDING", "DESCENDING", "INDEXED", "JUSTIFIED", "JUST", "BLANK", "EXTERNAL", "GLOBAL", "SYNCHRONIZED", "SYNC":
 		return true
 	}
 	_, isUsage := usages[word]
@@ -94,6 +114,19 @@ func (e *DataEntry) parseClause(c *cursor) error {
 		return e.parseOccurs(c)
 	case clause.Is("VALUE") || clause.Is("VALUES"):
 		return e.parseValues(c)
+	case clause.Is("JUSTIFIED") || clause.Is("JUST"):
+		c.optional("RIGHT")
+		e.Justified = true
+	case clause.Is("BLANK"):
+		c.optional("WHEN")
+		if !c.optional("ZERO") && !c.optional("ZEROS") && !c.optional("ZEROES") {
+			return fmt.Errorf("%s: %s: BLANK WHEN without ZERO", clause.Pos, e.Name)
+		}
+		e.BlankWhenZero = true
+	case clause.Is("EXTERNAL"):
+		e.External = true
+	case clause.Is("GLOBAL"):
+		e.Global = true
 	default:
 		return fmt.Errorf("%s: %s: %s is not supported yet", clause.Pos, e.Name, clause)
 	}
@@ -110,7 +143,8 @@ func (e *DataEntry) setUsage(t Token) error {
 }
 
 // parseOccurs parses OCCURS n [TIMES] or OCCURS n TO m [TIMES] DEPENDING
-// [ON] x, either followed by INDEXED [BY] and index names.
+// [ON] x, either followed by ASCENDING or DESCENDING [KEY] [IS] keys, and
+// INDEXED [BY] and index names.
 func (e *DataEntry) parseOccurs(c *cursor) error {
 	n, err := c.number()
 	if err != nil {
@@ -127,6 +161,14 @@ func (e *DataEntry) parseOccurs(c *cursor) error {
 	if c.optional("DEPENDING") {
 		c.optional("ON")
 		e.DependingOn = c.next().Text
+	}
+	for c.peek().Is("ASCENDING") || c.peek().Is("DESCENDING") {
+		descending := c.next().Is("DESCENDING")
+		c.optional("KEY")
+		c.optional("IS")
+		for !c.done() && !isClause(c.peek().Text) {
+			e.Keys = append(e.Keys, TableKey{Name: c.next().Text, Descending: descending})
+		}
 	}
 	if c.optional("INDEXED") {
 		c.optional("BY")
@@ -178,13 +220,15 @@ func (e *DataEntry) parseValues(c *cursor) error {
 	return nil
 }
 
-// literal reads a literal as written: a quoted string, a number, a
-// figurative constant, or ALL followed by a literal.
+// literal reads a literal as written: a quoted string, hex digits, a
+// number, a figurative constant, or ALL followed by a literal.
 func literal(c *cursor) (string, error) {
 	t := c.next()
 	switch {
 	case t.Kind == String:
 		return "'" + strings.ReplaceAll(t.Text, "'", "''") + "'", nil
+	case t.Kind == Hex:
+		return t.String(), nil
 	case t.Is("ALL"):
 		rest, err := literal(c)
 		return "ALL " + rest, err

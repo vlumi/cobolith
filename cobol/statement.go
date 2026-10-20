@@ -336,7 +336,7 @@ func (p *statementParser) operand() (Operand, error) {
 	t := p.next()
 	op := Operand{Text: t.String(), Pos: t.Pos}
 	switch {
-	case t.Kind == String:
+	case t.isLiteral():
 		return op, nil
 	case t.Kind != Word || verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION"):
 		return Operand{}, fmt.Errorf("expected an operand, found %s", t)
@@ -451,7 +451,7 @@ func (p *statementParser) operands() ([]Operand, error) {
 	for {
 		p.optional("ROUNDED")
 		t := p.peek()
-		if (t.Kind != Word && t.Kind != String) || t.Kind == Word && (verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION") || isTerminator(t)) {
+		if (t.Kind != Word && !t.isLiteral()) || t.Kind == Word && (verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION") || isTerminator(t)) {
 			return ops, nil
 		}
 		op, err := p.operand()
@@ -765,7 +765,7 @@ func (p *statementParser) searched(s *Statement, operand bool) error {
 // counter FOR starts the next phrase of.
 func (p *statementParser) atSearched(words []string) bool {
 	t := p.peek()
-	operand := t.Kind == String || t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t)
+	operand := t.isLiteral() || t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t)
 	return operand && !slices.ContainsFunc(words, t.Is) && !p.at(p.i+1).Is("FOR")
 }
 

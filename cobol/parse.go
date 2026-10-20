@@ -55,9 +55,28 @@ type FileControl struct {
 	Organization string
 	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
 	RecordKey    string // an indexed file's key
-	RelativeKey  string // the item that holds a relative file's record number
-	Status       string
-	Pos          Pos
+	// AlternateKeys are an indexed file's other keys, which it may also be
+	// read by.
+	AlternateKeys []AlternateKey
+	RelativeKey   string // the item that holds a relative file's record number
+	Status        string
+	Pos           Pos
+}
+
+// selectClauses are the words that start a clause of a SELECT entry: a
+// word of them after RELATIVE makes RELATIVE the organization, any other
+// the name of the relative key.
+var selectClauses = map[string]bool{
+	"ASSIGN": true, "ORGANIZATION": true, "ACCESS": true, "RECORD": true, "ALTERNATE": true,
+	"RELATIVE": true, "FILE": true, "STATUS": true, "RESERVE": true, "PADDING": true,
+	"SEQUENTIAL": true, "INDEXED": true,
+}
+
+// AlternateKey is an alternate record key of an indexed file, and whether
+// records may share its value.
+type AlternateKey struct {
+	Name       string
+	Duplicates bool
 }
 
 // FileDescription is an FD or SD entry with the records under it, and the
@@ -287,7 +306,9 @@ func (p *Program) parseEnvironment(tokens []Token) error {
 }
 
 // parseSelect parses SELECT [OPTIONAL] name ASSIGN [TO] target and the
-// ORGANIZATION, ACCESS MODE, RECORD KEY and FILE STATUS clauses.
+// ORGANIZATION, ACCESS MODE, RECORD KEY, ALTERNATE RECORD KEY, RELATIVE
+// KEY and FILE STATUS clauses; and RESERVE, PADDING and RECORD DELIMITER,
+// which change no record, and are passed over.
 func parseSelect(entry []Token) (FileControl, error) {
 	c := &cursor{tokens: entry}
 	c.next()
@@ -299,9 +320,12 @@ func parseSelect(entry []Token) (FileControl, error) {
 		case clause.Is("ASSIGN"):
 			c.optional("TO")
 			file.Assign = c.next().Text
-		case clause.Is("ORGANIZATION"):
-			c.optional("IS")
-			file.Organization = c.next().Text
+		case clause.Is("ORGANIZATION") || clause.Is("SEQUENTIAL") || clause.Is("INDEXED") || clause.Is("RELATIVE") && (c.done() || selectClauses[c.peek().Text]):
+			if clause.Is("ORGANIZATION") {
+				c.optional("IS")
+				clause = c.next()
+			}
+			file.Organization = clause.Text
 			if file.Organization == "LINE" || file.Organization == "RECORD" {
 				file.Organization += " " + c.next().Text
 			}
@@ -309,17 +333,43 @@ func parseSelect(entry []Token) (FileControl, error) {
 			c.optional("MODE")
 			c.optional("IS")
 			file.Access = c.next().Text
+		case clause.Is("RECORD") && c.peek().Is("DELIMITER"):
+			c.next()
+			c.optional("IS")
+			c.next()
 		case clause.Is("RECORD"):
 			c.optional("KEY")
 			c.optional("IS")
 			file.RecordKey = c.next().Text
+		case clause.Is("ALTERNATE"):
+			c.optional("RECORD")
+			c.optional("KEY")
+			c.optional("IS")
+			key := AlternateKey{Name: c.next().Text}
+			if c.optional("WITH") || c.peek().Is("DUPLICATES") {
+				key.Duplicates = c.optional("DUPLICATES")
+			}
+			file.AlternateKeys = append(file.AlternateKeys, key)
+		case clause.Is("RESERVE"):
+			if _, err := c.number(); err != nil {
+				return FileControl{}, err
+			}
+			if !c.optional("AREA") {
+				c.optional("AREAS")
+			}
+		case clause.Is("PADDING"):
+			c.optional("CHARACTER")
+			c.optional("IS")
+			c.next()
 		case clause.Is("RELATIVE"):
 			c.optional("KEY")
 			c.optional("IS")
 			file.RelativeKey = c.next().Text
-		case clause.Is("FILE"):
-			if err := c.expect("STATUS"); err != nil {
-				return FileControl{}, err
+		case clause.Is("FILE") || clause.Is("STATUS"):
+			if clause.Is("FILE") {
+				if err := c.expect("STATUS"); err != nil {
+					return FileControl{}, err
+				}
 			}
 			c.optional("IS")
 			file.Status = c.next().Text
@@ -360,35 +410,68 @@ func (p *Program) parseData(tokens []Token) error {
 // parseFileDescription parses FD or SD name and its RECORD clause:
 // RECORD [CONTAINS] n [CHARACTERS], RECORD [CONTAINS] n TO m [CHARACTERS],
 // or RECORD [IS] VARYING [IN] [SIZE] [FROM] n TO m [CHARACTERS] DEPENDING
-// [ON] item.
+// [ON] item. The clauses that change no record, BLOCK, LABEL, VALUE OF,
+// DATA RECORDS, LINAGE, CODE-SET, EXTERNAL and GLOBAL, are passed over.
 func parseFileDescription(entry []Token) (FileDescription, error) {
 	fd := FileDescription{Kind: entry[0].Text, Name: entry[1].Text, Pos: entry[0].Pos}
 	c := &cursor{tokens: entry[2:]}
 	for !c.done() {
 		clause := c.next()
-		if !clause.Is("RECORD") {
-			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
-		}
-		for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
-			c.optional(word)
-		}
-		var err error
-		if fd.MinLength, err = c.number(); err != nil {
-			return FileDescription{}, err
-		}
-		fd.MaxLength = fd.MinLength
-		if c.optional("TO") {
-			if fd.MaxLength, err = c.number(); err != nil {
+		switch {
+		case clause.Is("RECORD"):
+			if err := fd.parseRecordClause(c); err != nil {
 				return FileDescription{}, err
 			}
-		}
-		c.optional("CHARACTERS")
-		if c.optional("DEPENDING") {
-			c.optional("ON")
-			fd.LengthIn = c.next().Text
+		case clause.Is("LABEL") || clause.Is("DATA"):
+			if !c.optional("RECORD") {
+				c.optional("RECORDS")
+			}
+			c.passClause()
+		case clause.Is("BLOCK") || clause.Is("VALUE") || clause.Is("LINAGE") || clause.Is("CODE-SET") || clause.Is("IS"):
+			c.passClause()
+		case clause.Is("EXTERNAL") || clause.Is("GLOBAL"):
+		default:
+			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
 		}
 	}
 	return fd, nil
+}
+
+// fdClauses are the words that start a clause of an FD or SD entry.
+var fdClauses = map[string]bool{
+	"RECORD": true, "BLOCK": true, "LABEL": true, "VALUE": true, "DATA": true, "LINAGE": true,
+	"CODE-SET": true, "EXTERNAL": true, "GLOBAL": true,
+}
+
+// passClause passes over the rest of a clause of an FD or SD entry, up to
+// the next clause.
+func (c *cursor) passClause() {
+	for !c.done() && (c.peek().Kind != Word || !fdClauses[c.peek().Text]) {
+		c.next()
+	}
+}
+
+// parseRecordClause parses the rest of a RECORD clause, after RECORD.
+func (fd *FileDescription) parseRecordClause(c *cursor) error {
+	for _, word := range []string{"CONTAINS", "IS", "VARYING", "IN", "SIZE", "FROM"} {
+		c.optional(word)
+	}
+	var err error
+	if fd.MinLength, err = c.number(); err != nil {
+		return err
+	}
+	fd.MaxLength = fd.MinLength
+	if c.optional("TO") {
+		if fd.MaxLength, err = c.number(); err != nil {
+			return err
+		}
+	}
+	c.optional("CHARACTERS")
+	if c.optional("DEPENDING") {
+		c.optional("ON")
+		fd.LengthIn = c.next().Text
+	}
+	return nil
 }
 
 func (p *Program) addDataEntry(section string, tokens []Token) error {

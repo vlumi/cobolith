@@ -138,7 +138,7 @@ func TestParseErrors(t *testing.T) {
 	for name, source := range map[string]string{
 		"FD without a name":     head + "       DATA DIVISION.\n       FILE SECTION.\n       FD.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
 		"a paragraph twice":     head + "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n       MAIN-PARA.\n           STOP RUN.\n",
-		"an FD clause not read": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD  IN-FILE BLOCK CONTAINS 0 RECORDS.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"an FD clause not read": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD  IN-FILE REPORT IS SALES.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
 	} {
 		tokens, err := Lex("test", []byte(source))
 		if err != nil {
@@ -424,5 +424,69 @@ MAIN-PARA.
 	}
 	if got := entries["A"].Values; !slices.Equal(got, []string{"X'C1C2C3C4'"}) {
 		t.Errorf("hex value %q", got)
+	}
+}
+
+// The clauses of SELECT and FD entries that change no record are passed
+// over; an indexed file's alternate keys, a relative key without KEY, and
+// an organization given alone are read.
+func TestFileClauses(t *testing.T) {
+	source := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. FILES.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT MASTER ASSIGN TO MASTERDD INDEXED
+               ACCESS MODE IS DYNAMIC
+               RECORD KEY IS MS-KEY
+               ALTERNATE RECORD KEY IS MS-NAME WITH DUPLICATES
+               ALTERNATE KEY MS-CODE
+               RESERVE 2 AREAS
+               STATUS IS MS-STATUS.
+           SELECT SLOTS ASSIGN TO SLOTSDD
+               ORGANIZATION RELATIVE
+               RELATIVE SL-NUMBER
+               PADDING CHARACTER IS '*'
+               RECORD DELIMITER IS STANDARD-1.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  MASTER
+           BLOCK CONTAINS 10 RECORDS
+           LABEL RECORDS ARE STANDARD
+           VALUE OF FILE-ID IS 'MASTER'
+           DATA RECORD IS MS-RECORD
+           RECORD CONTAINS 20 CHARACTERS.
+       01  MS-RECORD.
+           05  MS-KEY  PIC X(4).
+           05  MS-NAME PIC X(10).
+           05  MS-CODE PIC X(6).
+       FD  SLOTS LINAGE IS 60 LINES WITH FOOTING AT 55
+           CODE-SET IS ASCII IS EXTERNAL.
+       01  SL-RECORD PIC X(80).
+       WORKING-STORAGE SECTION.
+       01  MS-STATUS PIC XX.
+       01  SL-NUMBER PIC 9(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           STOP RUN.
+`
+	tokens, err := Lex("FILES.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("FILES.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	master, slots := p.Files[0], p.Files[1]
+	wantKeys := []AlternateKey{{Name: "MS-NAME", Duplicates: true}, {Name: "MS-CODE"}}
+	if master.Organization != "INDEXED" || master.RecordKey != "MS-KEY" || !slices.Equal(master.AlternateKeys, wantKeys) || master.Status != "MS-STATUS" {
+		t.Errorf("master %+v", master)
+	}
+	if slots.Organization != "RELATIVE" || slots.RelativeKey != "SL-NUMBER" {
+		t.Errorf("slots %+v", slots)
+	}
+	if fd := p.FileSection[0]; fd.MinLength != 20 || fd.MaxLength != 20 {
+		t.Errorf("master FD lengths %d to %d, want 20", fd.MinLength, fd.MaxLength)
 	}
 }

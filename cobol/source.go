@@ -44,6 +44,9 @@ const (
 	// CommentEntry is the free text of an identification paragraph such as
 	// AUTHOR or DATE-WRITTEN, which the compiler treats as a comment.
 	CommentEntry
+	// Hex is a hexadecimal literal, X'0D25': its hex digits, without the X
+	// and the quotes.
+	Hex
 )
 
 // commentEntryParagraphs are the identification paragraphs whose text is a
@@ -70,10 +73,18 @@ func (t Token) String() string {
 	switch t.Kind {
 	case String:
 		return "'" + t.Text + "'"
+	case Hex:
+		return "X'" + t.Text + "'"
 	case Period:
 		return "."
 	}
 	return t.Text
+}
+
+// isLiteral reports whether the token is a quoted literal, of characters
+// or of hex digits.
+func (t Token) isLiteral() bool {
+	return t.Kind == String || t.Kind == Hex
 }
 
 // Is reports whether the token is the given word.
@@ -286,6 +297,10 @@ func (l *lexer) scan(pos Pos, body []byte, i int) {
 				}
 			}
 			i++
+		case (c == 'X' || c == 'x') && i+1 < len(body) && (body[i+1] == '\'' || body[i+1] == '"'):
+			l.open = &Token{Kind: Hex, Pos: pos}
+			l.quote = body[i+1]
+			i = l.literal(body, i+2)
 		default:
 			end := wordEnd(body, i, l.picture)
 			l.emit(Token{Kind: Word, Text: strings.ToUpper(string(body[i:end])), Pos: pos})

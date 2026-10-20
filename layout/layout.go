@@ -164,6 +164,13 @@ func place(f *Field, start int, usage string, dialect cobol.Dialect) error {
 }
 
 func (f *Field) placeElementary(dialect cobol.Dialect) error {
+	if size, ok := floatSizes[f.Usage]; ok {
+		if f.Picture != "" {
+			return fmt.Errorf("%s: %s: %s takes no picture", f.Pos, f.Name, f.Usage)
+		}
+		f.Length, f.Category, f.Signed = size, Numeric, true
+		return nil
+	}
 	if f.Picture == "" {
 		return fmt.Errorf("%s: elementary %s has no picture", f.Pos, f.Name)
 	}
@@ -189,6 +196,10 @@ func (f *Field) placeElementary(dialect cobol.Dialect) error {
 	}
 	return nil
 }
+
+// floatSizes are the sizes of the floating-point usages, which take no
+// picture: single and double precision, the same in every dialect.
+var floatSizes = map[string]int{"COMP-1": 4, "COMP-2": 8}
 
 func redefined(siblings []*Field, name string) *Field {
 	for _, s := range siblings {

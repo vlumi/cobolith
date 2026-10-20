@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -73,8 +74,13 @@ const (
 )
 
 // DD binds the file a program knows by Name to a dataset (DSN, Disp and,
-// for new datasets, LRECL), to the job's output (Sysout), or to nothing
-// (Dummy: reads find no records, writes are discarded).
+// for new datasets, LRECL, if given), to the job's output (Sysout), or to
+// nothing (Dummy: reads find no records, writes are discarded).
+//
+// DISP=(status,normal,abnormal) is Disp, the status, NEW when it is left
+// out or there is no DISP; and Normal and Abnormal, what becomes of the
+// dataset when the step ends, normally or not, as written: KEEP, DELETE,
+// PASS, CATLG or UNCATLG, empty when not given.
 //
 // DD * is InStream: the job's in-stream data, which a job's text may not
 // carry, its lines being no statements; whoever runs the job supplies it.
@@ -98,6 +104,8 @@ type DD struct {
 	Relative   bool
 	Temporary  bool
 	Disp       Disp
+	Normal     string
+	Abnormal   string
 	LRECL      int
 	Indexed    bool
 	Sysout     bool
@@ -328,7 +336,7 @@ func parseDD(s statement) (DD, error) {
 				return DD{}, err
 			}
 		case "DISP":
-			dd.Disp = Disp(value)
+			dd.Disp, dd.Normal, dd.Abnormal = parseDisp(value)
 		case "DCB":
 			lrecl, err := parseDCB(value)
 			if err != nil {
@@ -355,6 +363,9 @@ func parseDD(s statement) (DD, error) {
 		default:
 			return DD{}, fmt.Errorf("DD %s: unknown operand %q", s.name, key)
 		}
+	}
+	if dd.DSN != "" && dd.Disp == "" {
+		dd.Disp = New
 	}
 	return dd, dd.check()
 }
@@ -392,12 +403,27 @@ func (dd DD) check() error {
 		return nil
 	case dd.Temporary && dd.Relative:
 		return fmt.Errorf("DD %s: a temporary dataset has no generations", dd.Name)
-	case dd.Disp == New && dd.LRECL == 0:
-		return fmt.Errorf("DD %s: a new dataset needs LRECL=n or DCB=(RECFM=FB,LRECL=n)", dd.Name)
 	case dd.Disp != Shr && dd.Disp != Old && dd.Disp != New && dd.Disp != Mod:
 		return fmt.Errorf("DD %s: DISP=%s is not SHR, OLD, NEW or MOD", dd.Name, dd.Disp)
 	}
+	for _, end := range []string{dd.Normal, dd.Abnormal} {
+		if end != "" && !slices.Contains([]string{"KEEP", "DELETE", "PASS", "CATLG", "UNCATLG"}, end) {
+			return fmt.Errorf("DD %s: %s is not KEEP, DELETE, PASS, CATLG or UNCATLG", dd.Name, end)
+		}
+	}
 	return nil
+}
+
+// parseDisp reads DISP=status or DISP=(status,normal,abnormal), any of
+// them left out; the status is NEW when it is.
+func parseDisp(value string) (status Disp, normal, abnormal string) {
+	parts := strings.Split(unparenthesize(value), ",")
+	parts = append(parts, "", "")
+	status = Disp(parts[0])
+	if status == "" {
+		status = New
+	}
+	return status, parts[1], parts[2]
 }
 
 // parseDCB reads the record length from DCB=(RECFM=FB,LRECL=n): fixed-length

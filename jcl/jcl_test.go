@@ -62,7 +62,7 @@ func TestParseErrors(t *testing.T) {
 		"DD before EXEC":      "//J JOB\n//IN DD DSN=A,DISP=SHR\n",
 		"no PGM":              "//J JOB\n//S EXEC COND=(4,LT)\n",
 		"bad operator":        "//J JOB\n//S EXEC PGM=P,COND=(4,XX)\n",
-		"new without DCB":     "//J JOB\n//S EXEC PGM=P\n//OUT DD DSN=A,DISP=NEW\n",
+		"unknown end":         "//J JOB\n//S EXEC PGM=P\n//OUT DD DSN=A,DISP=(NEW,ERASE),LRECL=80\n",
 		"unknown DISP":        "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A,DISP=KEEP\n",
 		"bad generation":      "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=A(X),DISP=SHR\n",
 		"temp generation":     "//J JOB\n//S EXEC PGM=P\n//IN DD DSN=&&A(+1),DISP=SHR\n",
@@ -163,5 +163,31 @@ func TestParseFile(t *testing.T) {
 	}
 	if _, err := ParseFile("no/such.jcl"); err == nil {
 		t.Error("parsed a file that does not exist")
+	}
+}
+
+// DISP gives a dataset's status, NEW when left out, and what becomes of it
+// at the step's normal and abnormal end, as written; a new dataset may
+// leave its record length to whoever creates it.
+func TestDisp(t *testing.T) {
+	for operands, want := range map[string]DD{
+		"DSN=A,DISP=SHR":                {Disp: Shr},
+		"DSN=A,DISP=(NEW,CATLG,DELETE)": {Disp: New, Normal: "CATLG", Abnormal: "DELETE"},
+		"DSN=&&A,DISP=(NEW,PASS)":       {Disp: New, Normal: "PASS", Temporary: true},
+		"DSN=A,DISP=(,KEEP)":            {Disp: New, Normal: "KEEP"},
+		"DSN=A,DISP=(OLD,,KEEP)":        {Disp: Old, Abnormal: "KEEP"},
+		"DSN=A":                         {Disp: New},
+		"DSN=A,DISP=NEW,LRECL=80":       {Disp: New, LRECL: 80},
+	} {
+		job, err := Parse(strings.NewReader("//J JOB\n//S EXEC PGM=P\n//F DD " + operands + "\n"))
+		if err != nil {
+			t.Errorf("%s: %v", operands, err)
+			continue
+		}
+		dd := job.Steps[0].DDs[0]
+		got := DD{Disp: dd.Disp, Normal: dd.Normal, Abnormal: dd.Abnormal, Temporary: dd.Temporary, LRECL: dd.LRECL}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v, want %+v", operands, got, want)
+		}
 	}
 }

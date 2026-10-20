@@ -82,10 +82,10 @@ type Operand struct {
 var verbs = map[string]bool{
 	"ACCEPT": true, "ADD": true, "CALL": true, "CLOSE": true, "COMPUTE": true, "CONTINUE": true,
 	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
-	"GOBACK": true, "IF": true, "INITIALIZE": true, "MOVE": true, "MULTIPLY": true, "OPEN": true,
-	"PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true, "REWRITE": true, "SEARCH": true,
-	"SET": true, "SORT": true, "START": true, "STOP": true, "STRING": true, "SUBTRACT": true,
-	"WRITE": true,
+	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true,
+	"MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true,
+	"REWRITE": true, "SEARCH": true, "SET": true, "SORT": true, "START": true, "STOP": true,
+	"STRING": true, "SUBTRACT": true, "UNSTRING": true, "WRITE": true,
 }
 
 // terminators end the scope of a statement, such as END-IF. A data name
@@ -95,7 +95,7 @@ var terminators = map[string]bool{
 	"END-DISPLAY": true, "END-DIVIDE": true, "END-EVALUATE": true, "END-IF": true,
 	"END-MULTIPLY": true, "END-PERFORM": true, "END-READ": true, "END-RETURN": true,
 	"END-REWRITE": true, "END-SEARCH": true, "END-START": true, "END-STRING": true,
-	"END-SUBTRACT": true, "END-WRITE": true,
+	"END-SUBTRACT": true, "END-UNSTRING": true, "END-WRITE": true,
 }
 
 // keywords are reserved words that end an operand list.
@@ -112,7 +112,11 @@ var keywords = map[string]bool{
 	"PARAGRAPH": true, "PROGRAM": true, "SECTION": true, "FUNCTION": true, "CORRESPONDING": true,
 	"CORR": true, "LINE": true, "LINES": true, "PAGE": true, "NUMERIC": true, "ALPHABETIC": true,
 	"POSITIVE": true, "NEGATIVE": true, "TEST": true, "REFERENCE": true, "CONTENT": true, "EXCEPTION": true,
-	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
+	"REPLACING": true, "TALLYING": true, "CONVERTING": true, "DELIMITER": true, "COUNT": true,
+	"CHARACTERS": true, "LEADING": true, "FIRST": true, "INITIAL": true, "FOR": true, "DATA": true,
+	"ALPHANUMERIC": true, "ALPHANUMERIC-EDITED": true, "NUMERIC-EDITED": true, "NATIONAL": true,
+	"NATIONAL-EDITED": true,
+	"=":               true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
 func isTerminator(t Token) bool {
@@ -221,9 +225,13 @@ func (p *statementParser) statement() (Statement, error) {
 	case "SET":
 		err = p.set(&s)
 	case "INITIALIZE":
-		s.Writes, err = p.operands()
+		err = p.initialize(&s)
 	case "STRING":
 		err = p.stringStatement(&s)
+	case "UNSTRING":
+		err = p.unstring(&s)
+	case "INSPECT":
+		err = p.inspect(&s)
 	case "DISPLAY", "ACCEPT":
 		err = p.display(&s)
 	case "IF":
@@ -250,7 +258,7 @@ func (p *statementParser) statement() (Statement, error) {
 		err = p.start(&s)
 	case "CALL":
 		err = p.call(&s)
-	case "SORT":
+	case "SORT", "MERGE":
 		err = p.sort(&s)
 	case "STOP":
 		if err = p.expect("RUN"); err == nil {
@@ -328,7 +336,7 @@ func (p *statementParser) operand() (Operand, error) {
 	t := p.next()
 	op := Operand{Text: t.String(), Pos: t.Pos}
 	switch {
-	case t.Kind == String:
+	case t.isLiteral():
 		return op, nil
 	case t.Kind != Word || verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION"):
 		return Operand{}, fmt.Errorf("expected an operand, found %s", t)
@@ -443,7 +451,7 @@ func (p *statementParser) operands() ([]Operand, error) {
 	for {
 		p.optional("ROUNDED")
 		t := p.peek()
-		if (t.Kind != Word && t.Kind != String) || t.Kind == Word && (verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION") || isTerminator(t)) {
+		if (t.Kind != Word && !t.isLiteral()) || t.Kind == Word && (verbs[t.Text] || keywords[t.Text] && !t.Is("FUNCTION") || isTerminator(t)) {
 			return ops, nil
 		}
 		op, err := p.operand()
@@ -572,6 +580,193 @@ func (p *statementParser) stringStatement(s *Statement) error {
 		s.Writes = append(s.Writes, pointer)
 	}
 	return p.conditionalPhrases(s, "END-STRING", "ON OVERFLOW")
+}
+
+// initialize parses INITIALIZE items [REPLACING category [DATA] BY value
+// ...], the values read.
+func (p *statementParser) initialize(s *Statement) error {
+	var err error
+	if s.Writes, err = p.operands(); err != nil || !p.optional("REPLACING") {
+		return err
+	}
+	for p.optional("ALPHABETIC", "ALPHANUMERIC", "NUMERIC", "ALPHANUMERIC-EDITED", "NUMERIC-EDITED", "NATIONAL", "NATIONAL-EDITED") {
+		p.optional("DATA")
+		if err := p.expect("BY"); err != nil {
+			return err
+		}
+		value, err := p.operand()
+		if err != nil {
+			return err
+		}
+		s.Reads = append(s.Reads, value)
+	}
+	return nil
+}
+
+// unstring parses UNSTRING source [DELIMITED [BY] [ALL] delimiter [OR
+// [ALL] delimiter] ...] INTO target [DELIMITER [IN] item] [COUNT [IN]
+// item] ... [[WITH] POINTER item] [TALLYING [IN] item], and its ON
+// OVERFLOW phrases. The source and delimiters are read; the targets, and
+// the items that take each one's delimiter and count, written; the
+// pointer and the tally both.
+func (p *statementParser) unstring(s *Statement) error {
+	source, err := p.operand()
+	if err != nil {
+		return err
+	}
+	s.Reads = []Operand{source}
+	if p.optional("DELIMITED") {
+		p.optional("BY")
+		for {
+			p.optional("ALL")
+			delimiter, err := p.operand()
+			if err != nil {
+				return err
+			}
+			s.Reads = append(s.Reads, delimiter)
+			if !p.optional("OR") {
+				break
+			}
+		}
+	}
+	if err := p.expect("INTO"); err != nil {
+		return err
+	}
+	for {
+		targets, err := p.operands()
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			break
+		}
+		s.Writes = append(s.Writes, targets...)
+		for p.optional("DELIMITER", "COUNT") {
+			p.optional("IN")
+			item, err := p.operand()
+			if err != nil {
+				return err
+			}
+			s.Writes = append(s.Writes, item)
+		}
+	}
+	if p.optional("WITH") || p.peek().Is("POINTER") {
+		p.optional("POINTER")
+		if err := p.readWritten(s); err != nil {
+			return err
+		}
+	}
+	if p.optional("TALLYING") {
+		p.optional("IN")
+		if err := p.readWritten(s); err != nil {
+			return err
+		}
+	}
+	return p.conditionalPhrases(s, "END-UNSTRING", "ON OVERFLOW")
+}
+
+// readWritten parses an item a statement both reads and writes.
+func (p *statementParser) readWritten(s *Statement) error {
+	item, err := p.operand()
+	if err != nil {
+		return err
+	}
+	s.Reads = append(s.Reads, item)
+	s.Writes = append(s.Writes, item)
+	return nil
+}
+
+// inspect parses INSPECT item TALLYING counter FOR {CHARACTERS | ALL |
+// LEADING} ..., REPLACING {CHARACTERS | ALL | LEADING | FIRST} ... BY ...,
+// or CONVERTING ... TO ..., each with its BEFORE and AFTER INITIAL limits.
+// The item and what it is searched for are read; the counters, and the
+// item itself when it is replaced or converted, written.
+func (p *statementParser) inspect(s *Statement) error {
+	item, err := p.operand()
+	if err != nil {
+		return err
+	}
+	s.Reads = []Operand{item}
+	if p.optional("TALLYING") {
+		for t := p.peek(); t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t); t = p.peek() {
+			if err := p.readWritten(s); err != nil {
+				return err
+			}
+			if err := p.expect("FOR"); err != nil {
+				return err
+			}
+			if err := p.inspected(s, "CHARACTERS", "ALL", "LEADING"); err != nil {
+				return err
+			}
+		}
+	}
+	switch {
+	case p.optional("REPLACING"):
+		s.Writes = append(s.Writes, item)
+		return p.inspected(s, "CHARACTERS", "ALL", "LEADING", "FIRST")
+	case p.optional("CONVERTING"):
+		s.Writes = append(s.Writes, item)
+		return p.inspected(s)
+	}
+	return nil
+}
+
+// inspected parses the phrases of an INSPECT after FOR, REPLACING or
+// CONVERTING: each one of the words, then CHARACTERS alone or what it
+// looks for, one operand or more; or, for CONVERTING, which takes no word,
+// one operand.
+func (p *statementParser) inspected(s *Statement, words ...string) error {
+	if len(words) == 0 {
+		return p.searched(s, true)
+	}
+	if !slices.ContainsFunc(words, p.peek().Is) {
+		return fmt.Errorf("expected one of %s", strings.Join(words, ", "))
+	}
+	for p.optional(words...) {
+		characters := p.tokens[p.i-1].Is("CHARACTERS")
+		for first := true; first || !characters && p.atSearched(words); first = false {
+			if err := p.searched(s, !characters); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// searched parses what an INSPECT looks for, if it is an operand, BY or TO
+// what replaces it, and the BEFORE and AFTER INITIAL limits, all read.
+func (p *statementParser) searched(s *Statement, operand bool) error {
+	read := func() error {
+		op, err := p.operand()
+		s.Reads = append(s.Reads, op)
+		return err
+	}
+	if operand {
+		if err := read(); err != nil {
+			return err
+		}
+	}
+	if p.optional("BY", "TO") {
+		if err := read(); err != nil {
+			return err
+		}
+	}
+	for p.optional("BEFORE", "AFTER") {
+		p.optional("INITIAL")
+		if err := read(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// atSearched reports whether the next token is another operand an INSPECT
+// looks for: an operand, not one of the words that start a phrase, nor the
+// counter FOR starts the next phrase of.
+func (p *statementParser) atSearched(words []string) bool {
+	t := p.peek()
+	operand := t.isLiteral() || t.Kind == Word && !verbs[t.Text] && !keywords[t.Text] && !isTerminator(t)
+	return operand && !slices.ContainsFunc(words, t.Is) && !p.at(p.i+1).Is("FOR")
 }
 
 func (p *statementParser) display(s *Statement) error {
@@ -774,10 +969,47 @@ func (p *statementParser) performPhrase(s *Statement) error {
 			}
 			s.Reads = append(s.Reads, value)
 		}
-		return p.until(s)
+		if err := p.until(s); err != nil {
+			return err
+		}
+		if p.peek().Is("AFTER") {
+			return p.after(s)
+		}
+		return nil
 	case t.Is("UNTIL"):
 		return p.until(s)
 	}
+	return nil
+}
+
+// after parses the AFTER phrases of a PERFORM VARYING, each a counter of
+// a loop nested in the one before. The body runs while none of the UNTIL
+// conditions holds, so the statement's condition is all of them, joined
+// with OR.
+func (p *statementParser) after(s *Statement) error {
+	conditions := []*Condition{s.Condition}
+	for p.optional("AFTER") {
+		counter, err := p.operand()
+		if err != nil {
+			return err
+		}
+		s.Writes = append(s.Writes, counter)
+		for _, word := range []string{"FROM", "BY"} {
+			if err := p.expect(word); err != nil {
+				return err
+			}
+			value, err := p.operand()
+			if err != nil {
+				return err
+			}
+			s.Reads = append(s.Reads, value)
+		}
+		if err := p.until(s); err != nil {
+			return err
+		}
+		conditions = append(conditions, s.Condition)
+	}
+	s.Condition = combine("OR", conditions)
 	return nil
 }
 
@@ -895,12 +1127,14 @@ func (p *statementParser) write(s *Statement) error {
 	}
 	if p.optional("AFTER", "BEFORE") {
 		p.optional("ADVANCING")
-		lines, err := p.operand()
-		if err != nil {
-			return err
+		if !p.optional("PAGE") {
+			lines, err := p.operand()
+			if err != nil {
+				return err
+			}
+			s.Reads = append(s.Reads, lines)
+			p.optional("LINE", "LINES")
 		}
-		s.Reads = append(s.Reads, lines)
-		p.optional("LINE", "LINES")
 	}
 	if s.Verb == "RELEASE" {
 		return nil
@@ -973,7 +1207,8 @@ func (p *statementParser) call(s *Statement) error {
 }
 
 // sort parses SORT file ON ASCENDING KEY keys, then USING files or an
-// input procedure, then GIVING files or an output procedure.
+// input procedure, then GIVING files or an output procedure; and MERGE,
+// which takes the files it merges with USING.
 func (p *statementParser) sort(s *Statement) error {
 	s.Files = []FileRef{{Name: p.next().Text}}
 	for p.optional("ON") || p.peek().Is("ASCENDING") || p.peek().Is("DESCENDING") {

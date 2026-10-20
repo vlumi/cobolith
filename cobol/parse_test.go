@@ -351,3 +351,78 @@ end program outer.
 		}
 	}
 }
+
+// Statements before a procedure division's first paragraph are a paragraph
+// with no name.
+func TestStatementsBeforeTheFirstParagraph(t *testing.T) {
+	source := `>>SOURCE FORMAT IS FREE
+IDENTIFICATION DIVISION.
+PROGRAM-ID. FIRST.
+PROCEDURE DIVISION.
+    DISPLAY 'START'
+    PERFORM LATER-PARA
+    STOP RUN.
+LATER-PARA.
+    DISPLAY 'LATER'.
+`
+	tokens, err := Lex("FIRST.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("FIRST.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, para := range p.Paragraphs {
+		got = append(got, fmt.Sprintf("%q %d", para.Name, len(para.Statements)))
+	}
+	if want := []string{`"" 3`, `"LATER-PARA" 1`}; !slices.Equal(got, want) {
+		t.Errorf("paragraphs %q, want %q", got, want)
+	}
+}
+
+// The clauses that change no layout are kept on the entry: a table's keys,
+// JUSTIFIED, BLANK WHEN ZERO, EXTERNAL and GLOBAL; and a hex literal is a
+// value as written.
+func TestDataClauses(t *testing.T) {
+	source := `>>SOURCE FORMAT IS FREE
+IDENTIFICATION DIVISION.
+PROGRAM-ID. CLAUSES.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01  R EXTERNAL.
+    05  T OCCURS 5 ASCENDING KEY IS K1 K2 DESCENDING K3 INDEXED BY X.
+        10  K1 PIC X.
+        10  K2 PIC X.
+        10  K3 PIC X.
+    05  A PIC X(4) JUST RIGHT VALUE X'C1C2C3C4'.
+    05  B PIC 9(3) BLANK WHEN ZEROS.
+01  S PIC X GLOBAL.
+PROCEDURE DIVISION.
+MAIN-PARA.
+    STOP RUN.
+`
+	tokens, err := Lex("CLAUSES.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("CLAUSES.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := map[string]*DataEntry{}
+	for _, e := range p.WorkingStorage {
+		entries[e.Name] = e
+	}
+	if !entries["R"].External || !entries["S"].Global || !entries["A"].Justified || !entries["B"].BlankWhenZero {
+		t.Errorf("clauses lost: R %+v, S %+v, A %+v, B %+v", *entries["R"], *entries["S"], *entries["A"], *entries["B"])
+	}
+	want := []TableKey{{Name: "K1"}, {Name: "K2"}, {Name: "K3", Descending: true}}
+	if got := entries["T"].Keys; !slices.Equal(got, want) || !slices.Equal(entries["T"].IndexedBy, []string{"X"}) {
+		t.Errorf("keys %v, indexes %v", got, entries["T"].IndexedBy)
+	}
+	if got := entries["A"].Values; !slices.Equal(got, []string{"X'C1C2C3C4'"}) {
+		t.Errorf("hex value %q", got)
+	}
+}

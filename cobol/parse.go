@@ -340,12 +340,12 @@ func parseSelect(entry []Token) (FileControl, error) {
 		case clause.Is("RECORD"):
 			c.optional("KEY")
 			c.optional("IS")
-			file.RecordKey = c.next().Text
+			file.RecordKey = c.qualified()
 		case clause.Is("ALTERNATE"):
 			c.optional("RECORD")
 			c.optional("KEY")
 			c.optional("IS")
-			key := AlternateKey{Name: c.next().Text}
+			key := AlternateKey{Name: c.qualified()}
 			if c.optional("WITH") || c.peek().Is("DUPLICATES") {
 				key.Duplicates = c.optional("DUPLICATES")
 			}
@@ -364,7 +364,7 @@ func parseSelect(entry []Token) (FileControl, error) {
 		case clause.Is("RELATIVE"):
 			c.optional("KEY")
 			c.optional("IS")
-			file.RelativeKey = c.next().Text
+			file.RelativeKey = c.qualified()
 		case clause.Is("FILE") || clause.Is("STATUS"):
 			if clause.Is("FILE") {
 				if err := c.expect("STATUS"); err != nil {
@@ -372,10 +372,7 @@ func parseSelect(entry []Token) (FileControl, error) {
 				}
 			}
 			c.optional("IS")
-			file.Status = c.next().Text
-			if c.optional("OF") || c.optional("IN") {
-				c.next()
-			}
+			file.Status = c.qualified()
 		default:
 			return FileControl{}, fmt.Errorf("%s: SELECT %s: %s is not supported yet", clause.Pos, file.Name, clause)
 		}
@@ -568,6 +565,10 @@ func (s *splitter) take(tokens []Token, i int) (int, error) {
 		s.section, s.header = t.Text, &tokens[i]
 		s.procedures[t.Text] = true
 		return 2, nil
+	case i+3 < len(tokens) && tokens[i+1].Is("SECTION") && isNumber(tokens[i+2].Text) && tokens[i+3].Kind == Period:
+		s.section, s.header = t.Text, &tokens[i]
+		s.procedures[t.Text] = true
+		return 3, nil
 	case i+1 < len(tokens) && tokens[i+1].Kind == Period:
 		if s.procedures[t.Text] {
 			return 0, fmt.Errorf("%s: a second procedure named %s is not supported yet", t.Pos, t.Text)
@@ -671,6 +672,17 @@ func (c *cursor) expect(word string) error {
 		return fmt.Errorf("%s: expected %s, found %s", t.Pos, word, t)
 	}
 	return nil
+}
+
+// qualified reads a name and passes over the OF or IN names that qualify
+// it, which the name alone is enough to find in the programs read.
+func (c *cursor) qualified() string {
+	name := c.next().Text
+	for !c.done() && (c.peek().Is("OF") || c.peek().Is("IN")) {
+		c.next()
+		c.next()
+	}
+	return name
 }
 
 func (c *cursor) number() (int, error) {

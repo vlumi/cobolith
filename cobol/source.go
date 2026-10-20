@@ -251,6 +251,7 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 		return nil
 	}
 	if l.open == nil {
+		l.decimalPoint()
 		if len(l.tokens) == 0 || l.tokens[len(l.tokens)-1].Kind != Word {
 			return fmt.Errorf("%s: continuation line continues nothing", pos)
 		}
@@ -264,6 +265,23 @@ func (l *lexer) continuation(pos Pos, body []byte) error {
 	}
 	l.scan(pos, body, start+1)
 	return nil
+}
+
+// decimalPoint makes a period the decimal point of the number before it,
+// when a continuation line continues it: 999 and then . on a line of its
+// own, continued by 777, are 999.777.
+func (l *lexer) decimalPoint() {
+	n := len(l.tokens)
+	if n >= 2 && l.tokens[n-1].Kind == Period && l.tokens[n-2].Kind == Word && isNumeral(l.tokens[n-2].Text) {
+		l.tokens[n-2].Text += "."
+		l.tokens = l.tokens[:n-1]
+	}
+}
+
+// isNumeral reports whether a word is a number as written, signed or not.
+func isNumeral(word string) bool {
+	digits := strings.TrimLeft(word, "+-")
+	return digits != "" && strings.Trim(digits, "0123456789") == ""
 }
 
 // scan lexes body from index i. If a literal is open, it continues first.

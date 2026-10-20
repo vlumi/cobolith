@@ -2,6 +2,8 @@ package cobol
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -489,5 +491,40 @@ func TestFileClauses(t *testing.T) {
 	}
 	if fd := p.FileSection[0]; fd.MinLength != 20 || fd.MaxLength != 20 {
 		t.Errorf("master FD lengths %d to %d, want 20", fd.MinLength, fd.MaxLength)
+	}
+}
+
+// A section may give its priority number, an entry IS GLOBAL, and a COPY
+// REPLACING a qualified name.
+func TestSectionsAndQualifiedReplacing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "BOOK.cpy"), []byte("           MOVE A OF G TO B.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	program := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SECTIONS.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  G IS GLOBAL.
+           05  A PIC X.
+           05  C PIC X.
+       01  B PIC X.
+       PROCEDURE DIVISION.
+       MAIN SECTION 50.
+       MAIN-PARA.
+           COPY BOOK REPLACING A OF G BY C OF G.
+           STOP RUN.
+`
+	path := filepath.Join(dir, "SECTIONS.cbl")
+	if err := os.WriteFile(path, []byte(program), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ReadProgram(path, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	move := p.Paragraphs[0].Statements[0]
+	if p.Paragraphs[0].Section != "MAIN" || move.Text != "MOVE C OF G TO B" || !p.WorkingStorage[0].Global {
+		t.Errorf("section %q, statement %q, global %v", p.Paragraphs[0].Section, move.Text, p.WorkingStorage[0].Global)
 	}
 }

@@ -84,6 +84,7 @@ var verbs = map[string]bool{
 	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
 	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true, "NEXT": true,
 	"MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true,
+	"ALTER": true, "CANCEL": true,
 	"REWRITE": true, "SEARCH": true, "SET": true, "SORT": true, "START": true, "STOP": true,
 	"STRING": true, "SUBTRACT": true, "UNSTRING": true, "WRITE": true,
 }
@@ -115,8 +116,8 @@ var keywords = map[string]bool{
 	"REPLACING": true, "TALLYING": true, "CONVERTING": true, "DELIMITER": true, "COUNT": true,
 	"CHARACTERS": true, "LEADING": true, "FIRST": true, "INITIAL": true, "FOR": true, "DATA": true,
 	"ALPHANUMERIC": true, "ALPHANUMERIC-EDITED": true, "NUMERIC-EDITED": true, "NATIONAL": true,
-	"NATIONAL-EDITED": true,
-	"=":               true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
+	"NATIONAL-EDITED": true, "END-OF-PAGE": true, "EOP": true, "PROCEED": true,
+	"=": true, "<": true, ">": true, "<=": true, ">=": true, "+": true, "-": true, "*": true, "/": true, "**": true,
 }
 
 func isTerminator(t Token) bool {
@@ -258,6 +259,10 @@ func (p *statementParser) statement() (Statement, error) {
 		err = p.start(&s)
 	case "CALL":
 		err = p.call(&s)
+	case "CANCEL":
+		s.Reads, err = p.operands()
+	case "ALTER":
+		err = p.alter(&s)
 	case "SORT", "MERGE":
 		err = p.sort(&s)
 	case "STOP":
@@ -1035,7 +1040,7 @@ func (p *statementParser) goTo(s *Statement) error {
 		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
 	}
 	if len(s.Procedures) == 0 {
-		return fmt.Errorf("GO TO names no paragraph")
+		return nil
 	}
 	if p.optional("DEPENDING") {
 		p.optional("ON")
@@ -1044,6 +1049,31 @@ func (p *statementParser) goTo(s *Statement) error {
 			return err
 		}
 		s.Reads = append(s.Reads, selector)
+	}
+	return nil
+}
+
+// alter parses ALTER paragraph TO [PROCEED TO] paragraph ..., which
+// changes where the GO TO that is the first paragraph's one statement goes:
+// the pairs, in order.
+func (p *statementParser) alter(s *Statement) error {
+	for t := p.peek(); t.Kind == Word && p.procedures[t.Text]; t = p.peek() {
+		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.next().Text})
+		if err := p.expect("TO"); err != nil {
+			return err
+		}
+		if p.optional("PROCEED") {
+			if err := p.expect("TO"); err != nil {
+				return err
+			}
+		}
+		if t := p.next(); !p.procedures[t.Text] {
+			return fmt.Errorf("ALTER to %s, no paragraph", t)
+		}
+		s.Procedures = append(s.Procedures, ProcedureRef{Name: p.tokens[p.i-1].Text})
+	}
+	if len(s.Procedures) == 0 {
+		return fmt.Errorf("ALTER names no paragraph")
 	}
 	return nil
 }
@@ -1149,7 +1179,7 @@ func (p *statementParser) write(s *Statement) error {
 	if s.Verb == "RELEASE" {
 		return nil
 	}
-	return p.conditionalPhrases(s, "END-"+s.Verb, "INVALID KEY")
+	return p.conditionalPhrases(s, "END-"+s.Verb, "INVALID KEY", "AT END-OF-PAGE")
 }
 
 // start parses START file [KEY IS relation key], which positions an
@@ -1266,6 +1296,10 @@ func (p *statementParser) conditionalPhrases(s *Statement, terminator string, ph
 		negated := p.optional("NOT")
 		var kind string
 		switch {
+		case p.peek().Is("END-OF-PAGE") || p.peek().Is("EOP") || p.peek().Is("AT") && (p.at(p.i+1).Is("END-OF-PAGE") || p.at(p.i+1).Is("EOP")):
+			p.optional("AT")
+			p.next()
+			kind = "AT END-OF-PAGE"
 		case p.optional("AT") || p.peek().Is("END"):
 			if err := p.expect("END"); err != nil {
 				return err

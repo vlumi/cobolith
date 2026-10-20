@@ -123,6 +123,7 @@ func (e *DataEntry) parseClause(c *cursor) error {
 			return fmt.Errorf("%s: %s: BLANK WHEN without ZERO", clause.Pos, e.Name)
 		}
 		e.BlankWhenZero = true
+	case clause.Is("IS") && (c.peek().Is("EXTERNAL") || c.peek().Is("GLOBAL")):
 	case clause.Is("EXTERNAL"):
 		e.External = true
 	case clause.Is("GLOBAL"):

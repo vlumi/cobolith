@@ -79,7 +79,7 @@ The first release, a library of its own.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
 [Unreleased]: https://github.com/vlumi/cobolith/compare/v0.7.0...HEAD
-[0.7.0]: https://github.com/vlumi/cobolith/releases/tag/v0.7.0
+[0.7.0]: https://github.com/vlumi/cobolith/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vlumi/cobolith/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vlumi/cobolith/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vlumi/cobolith/compare/v0.3.0...v0.4.0

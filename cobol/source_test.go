@@ -231,8 +231,8 @@ func TestShiftJIS(t *testing.T) {
 	for _, tok := range tokens {
 		got = append(got, fmt.Sprintf("%d:%s", tok.Kind, tok.Text))
 	}
-	want := []string{"0:01", "0:\x8a\x61-\x93\xfa", "0:PIC", "0:N(2)", "0:VALUE", "7:\x93\xfa\x96\x7b", "2:.",
-		"0:MOVE", "7:\x93\xfa", "0:TO", "0:A", "0:MOVE", "6:93FA", "0:TO", "0:B"}
+	want := []string{"0:01", "0:蛎-日", "0:PIC", "0:N(2)", "0:VALUE", "7:日本", "2:.",
+		"0:MOVE", "7:日", "0:TO", "0:A", "0:MOVE", "6:93FA", "0:TO", "0:B"}
 	if !slices.Equal(got, want) {
 		t.Errorf("tokens\n%q\nwant\n%q", got, want)
 	}

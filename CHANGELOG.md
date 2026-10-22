@@ -9,6 +9,10 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 - The Report Writer: `REPORT IS` on an FD, which then has no records of its own; the `REPORT SECTION` as `Program.ReportSection`, each `RD` a `ReportDescription` with its controls and page limits; its report groups as data entries with `Type`, `TypeControl`, `Line`, `Column`, `Source` and `Sum`; and `INITIATE`, `GENERATE` and `TERMINATE`, which read the report or group they name. NIST's six Report Writer programs read with it: 439 of 459.
 - `ReadDataEntriesIn`, a copybook of data description entries read in an encoding, as `ReadIn` reads source.
 
+### Changed
+
+- A source read in Shift_JIS comes out in UTF-8: the lexer transcodes every token's text and comment, names, literals and comments alike, so that what a program is called and says reads wherever it goes. The data `record` reads and writes stays as the file has it. Cobolith gains its first dependency, `golang.org/x/text`, for the transcoding.
+
 ## [0.7.0] - 2026-10-20
 
 ### Added

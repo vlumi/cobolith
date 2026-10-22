@@ -690,10 +690,10 @@ func TestJapaneseProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := p.WorkingStorage[0]
-	if record.Name != "\x83\x8c\x83\x52\x81\x5b\x83\x68" || len(p.WorkingStorage) != 3 || p.WorkingStorage[1].Values[0] != "N'\x93\xfa\x96\x7b\x8c\xea'" {
+	if record.Name != "レコード" || len(p.WorkingStorage) != 3 || p.WorkingStorage[1].Values[0] != "N'日本語'" {
 		t.Errorf("record %q, %d entries, value %q", record.Name, len(p.WorkingStorage), p.WorkingStorage[1].Values)
 	}
-	if para := p.Paragraphs[0]; para.Name != "\x8f\x88\x97\x9d" || para.Statements[0].Text != "MOVE N'\x93\xfa' TO \x8e\x81\x96\xbc" {
+	if para := p.Paragraphs[0]; para.Name != "処理" || para.Statements[0].Text != "MOVE N'日' TO 氏名" {
 		t.Errorf("paragraph %q, statement %q", para.Name, para.Statements[0].Text)
 	}
 }

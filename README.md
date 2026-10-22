@@ -77,7 +77,7 @@ EOHIPPUS ELLA: -150.00
 | Package | Reads |
 | --- | --- |
 | [cobol/](cobol/) | Source in fixed format, or free after `>>SOURCE FORMAT IS FREE`; `COPY` with `REPLACING`, by words, qualified names, literals or pseudo-text; the divisions, file control and file descriptions, data description entries, the Report Writer's report descriptions and groups, and the statements of the procedure division, every token with the file and line it came from; `REPLACE`; and SPECIAL-NAMES' `DECIMAL-POINT IS COMMA` and `CURRENCY SIGN`, whose pictures and literals are kept in the standard form. A file of several programs, one after the other, with `ParseAll`, and programs nested in one. |
-| [layout/](layout/) | Record layouts from data description entries, in a dialect: each field's position, length, picture, usage and category, `OCCURS` with `DEPENDING ON`, `REDEFINES`, `RENAMES`, `SIGN`, `SYNCHRONIZED`, and condition names. |
+| [layout/](layout/) | Record layouts from data description entries, in a dialect: each field's position, length, picture, usage and category, `OCCURS` with `DEPENDING ON`, `REDEFINES`, `RENAMES`, `SIGN`, `SYNCHRONIZED`, and condition names; and the lines a report prints as the records of its file, their columns placed by `COLUMN`. |
 | [record/](record/) | The fields of a record by name, through its layout: text, display numbers with their overpunched signs, packed decimal, binary, and floating point. |
 | [jcl/](jcl/) | Jobs, their steps and DD statements: datasets with generations, temporary datasets, concatenations, `SYSOUT`, `DUMMY`, in-stream data, `COND` tests and dispositions. |
 

@@ -41,8 +41,16 @@ type Field struct {
 	Values      []string
 	Comment     []string
 	Conditions  []Condition
-	Children    []*Field
-	Pos         cobol.Pos
+	// Source and Sum are a Report Writer column's: the item it prints,
+	// and the items it adds up.
+	Source   string
+	Sum      []string
+	Children []*Field
+	Pos      cobol.Pos
+	// A report group's TYPE, control, LINE and COLUMN clauses, which
+	// ReportLines lays the group's lines out by.
+	reportType, reportControl, reportLine string
+	reportColumn                          int
 }
 
 // Condition is a level-88 condition name and the values that make it true.
@@ -157,21 +165,27 @@ func buildTree(entries []*cobol.DataEntry) ([]*Field, error) {
 
 func newField(e *cobol.DataEntry) *Field {
 	return &Field{
-		Level:        e.Level,
-		Name:         e.Name,
-		Picture:      e.Picture,
-		Usage:        e.Usage,
-		Sign:         e.Sign,
-		SignSeparate: e.SignSeparate,
-		Synchronized: e.Synchronized,
-		Redefines:    e.Redefines,
-		Occurs:       e.Occurs,
-		OccursMin:    e.OccursMin,
-		DependingOn:  e.DependingOn,
-		IndexedBy:    e.IndexedBy,
-		Values:       e.Values,
-		Comment:      e.Comment,
-		Pos:          e.Pos,
+		Level:         e.Level,
+		Name:          e.Name,
+		Picture:       e.Picture,
+		Usage:         e.Usage,
+		Sign:          e.Sign,
+		SignSeparate:  e.SignSeparate,
+		Synchronized:  e.Synchronized,
+		Redefines:     e.Redefines,
+		Occurs:        e.Occurs,
+		OccursMin:     e.OccursMin,
+		DependingOn:   e.DependingOn,
+		IndexedBy:     e.IndexedBy,
+		Values:        e.Values,
+		Comment:       e.Comment,
+		Source:        e.Source,
+		Sum:           e.Sum,
+		Pos:           e.Pos,
+		reportType:    e.Type,
+		reportControl: e.TypeControl,
+		reportLine:    e.Line,
+		reportColumn:  e.Column,
 	}
 }
 

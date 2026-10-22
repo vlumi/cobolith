@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/vlumi/cobolith/cobol"
@@ -37,6 +38,17 @@ func Program(p *cobol.Program, dialect cobol.Dialect) (*ProgramRecords, error) {
 		records, err := Records(fd.Entries, dialect)
 		if err != nil {
 			return nil, err
+		}
+		for _, name := range fd.Reports {
+			i := slices.IndexFunc(p.ReportSection, func(rd cobol.ReportDescription) bool { return rd.Name == name })
+			if i < 0 {
+				return nil, fmt.Errorf("%s: %s %s: no RD %s", fd.Pos, fd.Kind, fd.Name, name)
+			}
+			lines, err := ReportLines(p.ReportSection[i], dialect)
+			if err != nil {
+				return nil, err
+			}
+			records = append(records, lines...)
 		}
 		r.Files = append(r.Files, FileRecords{File: fd.Name, Records: records})
 	}

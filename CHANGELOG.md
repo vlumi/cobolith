@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-22
+
 ### Added
 
 - `cobol.ToUTF8` gives text in an encoding a source may be read in, Shift_JIS or none, in UTF-8, as the lexer gives its tokens: for what stands beside the source, such as the comments of the batch files that run it.
@@ -98,7 +100,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/vlumi/cobolith/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/vlumi/cobolith/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vlumi/cobolith/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vlumi/cobolith/compare/v0.5.0...v0.6.0

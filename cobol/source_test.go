@@ -244,3 +244,14 @@ func TestShiftJIS(t *testing.T) {
 		t.Errorf("without an encoding, the word is %q, want its ASCII letter upper-cased", ascii[1].Text)
 	}
 }
+
+// Text beside a Shift_JIS source is transcoded as its tokens are.
+func TestToUTF8(t *testing.T) {
+	got, err := ToUTF8("\x93\xfa\x96\x7b", ShiftJIS)
+	if err != nil || got != "日本" {
+		t.Errorf("ToUTF8 gave %q, %v, want 日本", got, err)
+	}
+	if got, err := ToUTF8("plain", ""); err != nil || got != "plain" {
+		t.Errorf("ToUTF8 of ASCII gave %q, %v", got, err)
+	}
+}

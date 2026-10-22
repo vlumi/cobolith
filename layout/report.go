@@ -11,8 +11,8 @@ import (
 // file: one for each LINE of each report group, its columns placed where
 // their COLUMN clauses put them, as wide as their pictures. A line is
 // named after its group, by the group's name or else its TYPE and
-// control, PAGE-HEADING or CONTROL-FOOTING-FINAL, and after its LINE
-// clause too when the group has more than one. A column with no COLUMN
+// control, PAGE-HEADING or CONTROL-FOOTING-FINAL, and numbered in order
+// when the group has more than one, PAGE-HEADING-LINE-2. A column with no COLUMN
 // clause follows the one before it, and one with no name is named after
 // its line and its column, PAGE-HEADING-COL-70, since what it prints is
 // worth following to.
@@ -24,10 +24,10 @@ func ReportLines(rd cobol.ReportDescription, dialect cobol.Dialect) ([]*Field, e
 	var records []*Field
 	for _, group := range groups {
 		lines := reportLines(group)
-		for _, line := range lines {
+		for i, line := range lines {
 			record := &Field{Level: 1, Name: groupName(group), Comment: group.Comment, Pos: line.Pos}
 			if len(lines) > 1 {
-				record.Name += "-LINE-" + strings.ReplaceAll(lineClause(group, line), " ", "-")
+				record.Name += "-LINE-" + strconv.Itoa(i+1)
 			}
 			end := 0
 			for _, column := range reportColumns(line) {
@@ -85,14 +85,6 @@ func reportLines(group *Field) []*Field {
 	}
 	walk(group)
 	return lines
-}
-
-// lineClause is a line's LINE clause as written, for its name.
-func lineClause(group, line *Field) string {
-	if line == group {
-		return group.reportLine
-	}
-	return line.reportLine
 }
 
 // reportColumns lists the elementary entries of a line, in order: each a

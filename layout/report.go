@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/vlumi/cobolith/cobol"
@@ -12,7 +13,9 @@ import (
 // named after its group, by the group's name or else its TYPE and
 // control, PAGE-HEADING or CONTROL-FOOTING-FINAL, and after its LINE
 // clause too when the group has more than one. A column with no COLUMN
-// clause follows the one before it.
+// clause follows the one before it, and one with no name is named after
+// its line and its column, PAGE-HEADING-COL-70, since what it prints is
+// worth following to.
 func ReportLines(rd cobol.ReportDescription, dialect cobol.Dialect) ([]*Field, error) {
 	groups, err := buildTree(rd.Entries)
 	if err != nil {
@@ -38,6 +41,9 @@ func ReportLines(rd cobol.ReportDescription, dialect cobol.Dialect) ([]*Field, e
 					return nil, err
 				}
 				end = max(end, column.Start+column.Length-1)
+				if column.Name == "FILLER" {
+					column.Name = record.Name + "-COL-" + strconv.Itoa(column.Start)
+				}
 				record.Children = append(record.Children, column)
 			}
 			record.Start, record.Length = 1, end

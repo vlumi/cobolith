@@ -39,8 +39,22 @@ type DataEntry struct {
 	// Renames and RenamesThru are a level-66 entry's RENAMES: the field it
 	// renames, or the first and last of the fields it renames together.
 	Renames, RenamesThru string
-	Comment              []string // the comment lines before the entry
-	Pos                  Pos
+	// The clauses of a report group of the REPORT SECTION. Type is the
+	// part of the report a level-01 group is, REPORT HEADING, PAGE
+	// HEADING, CONTROL HEADING, DETAIL, CONTROL FOOTING, PAGE FOOTING or
+	// REPORT FOOTING, and TypeControl the control item of a CONTROL
+	// HEADING or FOOTING, FINAL for the whole report's. Line is where a
+	// line is printed, as written: a line number, PLUS and a number, or
+	// NEXT PAGE. Column is where a field starts on its line. Source is the
+	// item a field prints, and Sum the items a field adds up.
+	Type        string
+	TypeControl string
+	Line        string
+	Column      int
+	Source      string
+	Sum         []string
+	Comment     []string // the comment lines before the entry
+	Pos         Pos
 }
 
 // TableKey is a key of an OCCURS table, and whether it is descending.
@@ -98,7 +112,8 @@ func isClause(t Token) bool {
 	}
 	switch t.Text {
 	case "PIC", "PICTURE", "USAGE", "REDEFINES", "OCCURS", "VALUE", "VALUES", "SIGN", "LEADING", "TRAILING",
-		"ASCENDING", "DESCENDING", "INDEXED", "JUSTIFIED", "JUST", "BLANK", "EXTERNAL", "GLOBAL", "SYNCHRONIZED", "SYNC", "RENAMES":
+		"ASCENDING", "DESCENDING", "INDEXED", "JUSTIFIED", "JUST", "BLANK", "EXTERNAL", "GLOBAL", "SYNCHRONIZED", "SYNC", "RENAMES",
+		"TYPE", "LINE", "LINES", "COLUMN", "COL", "SOURCE", "SUM", "NEXT", "GROUP", "RESET":
 		return true
 	}
 	_, isUsage := usages[t.Text]
@@ -151,10 +166,98 @@ func (e *DataEntry) parseClause(c *cursor) error {
 		e.External = true
 	case clause.Is("GLOBAL"):
 		e.Global = true
+	case clause.Is("TYPE"):
+		return e.parseType(c)
+	case clause.Is("LINE") || clause.Is("LINES"):
+		c.optional("NUMBER")
+		c.optional("NUMBERS")
+		if !c.optional("IS") {
+			c.optional("ARE")
+		}
+		e.Line = c.lineNumber()
+	case clause.Is("COLUMN") || clause.Is("COL"):
+		c.optional("NUMBER")
+		c.optional("IS")
+		column, err := c.number()
+		if err != nil {
+			return err
+		}
+		e.Column = column
+	case clause.Is("SOURCE"):
+		c.optional("IS")
+		e.Source = c.qualified()
+	case clause.Is("SUM"):
+		c.optional("OF")
+		for !c.done() && !isClause(c.peek()) && !c.peek().Is("UPON") {
+			e.Sum = append(e.Sum, c.qualified())
+		}
+		if c.optional("UPON") {
+			for !c.done() && !isClause(c.peek()) {
+				c.next()
+			}
+		}
+	case clause.Is("NEXT"):
+		if err := c.expect("GROUP"); err != nil {
+			return err
+		}
+		c.optional("IS")
+		c.lineNumber()
+	case clause.Is("GROUP"):
+		c.optional("INDICATE")
+	case clause.Is("RESET"):
+		c.optional("ON")
+		c.next()
 	default:
 		return fmt.Errorf("%s: %s: %s is not supported yet", clause.Pos, e.Name, clause)
 	}
 	return nil
+}
+
+// parseType parses the rest of a report group's TYPE clause: the part of
+// the report, in full or by its two letters, and the control item of a
+// CONTROL HEADING or FOOTING.
+func (e *DataEntry) parseType(c *cursor) error {
+	c.optional("IS")
+	t := c.next()
+	parts := map[string]string{
+		"RH": "REPORT HEADING", "PH": "PAGE HEADING", "CH": "CONTROL HEADING", "DE": "DETAIL",
+		"CF": "CONTROL FOOTING", "PF": "PAGE FOOTING", "RF": "REPORT FOOTING", "DETAIL": "DETAIL",
+	}
+	switch {
+	case parts[t.Text] != "":
+		e.Type = parts[t.Text]
+	case t.Is("REPORT") || t.Is("PAGE") || t.Is("CONTROL"):
+		part := c.next()
+		if !part.Is("HEADING") && !part.Is("FOOTING") {
+			return fmt.Errorf("%s: %s: TYPE %s %s, want HEADING or FOOTING", part.Pos, e.Name, t, part)
+		}
+		e.Type = t.Text + " " + part.Text
+	default:
+		return fmt.Errorf("%s: %s: TYPE %s is not a part of a report", t.Pos, e.Name, t)
+	}
+	if strings.HasPrefix(e.Type, "CONTROL") {
+		c.optional("IS")
+		if c.done() || isClause(c.peek()) {
+			return fmt.Errorf("%s: %s: TYPE %s without its control", t.Pos, e.Name, e.Type)
+		}
+		e.TypeControl = c.qualified()
+	}
+	return nil
+}
+
+// lineNumber reads a line position as written: a number, PLUS and a
+// number, or NEXT PAGE, empty when there is none.
+func (c *cursor) lineNumber() string {
+	switch {
+	case c.optional("PLUS"):
+		return "PLUS " + c.next().Text
+	case c.optional("NEXT"):
+		c.optional("PAGE")
+		return "NEXT PAGE"
+	case !c.done() && !isClause(c.peek()):
+		return c.next().Text
+	}
+	return ""
 }
 
 func (e *DataEntry) setUsage(t Token) error {

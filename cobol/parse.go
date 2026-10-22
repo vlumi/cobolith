@@ -16,6 +16,7 @@ type Program struct {
 	Identification []IdentificationEntry
 	Files          []FileControl
 	FileSection    []FileDescription
+	ReportSection  []ReportDescription
 	WorkingStorage []*DataEntry
 	// Linkage are the items a calling program passes, which the procedure
 	// division names in Using.
@@ -99,7 +100,31 @@ type FileDescription struct {
 	MinLength, MaxLength int
 	LengthIn             string
 	Entries              []*DataEntry
-	Pos                  Pos
+	// Reports are the reports of the REPORT SECTION written to the file,
+	// REPORT IS or REPORTS ARE; a file with any has no records of its own.
+	Reports []string
+	Pos     Pos
+}
+
+// ReportDescription is an RD of the REPORT SECTION, the Report Writer's
+// description of a report: the file writes it as INITIATE, GENERATE and
+// TERMINATE say. Controls are the items whose change of value starts a
+// control heading and ends a control footing, FINAL among them when the
+// report has one; the page limit and the line numbers of its parts are
+// as the PAGE clause gives them, zero where it does not. Its entries are
+// the report groups, each a level-01 entry whose TYPE says which part of
+// the report it is, with the lines and columns under it.
+type ReportDescription struct {
+	Name        string
+	Controls    []string
+	PageLimit   int
+	Heading     int
+	FirstDetail int
+	LastDetail  int
+	Footing     int
+	Entries     []*DataEntry
+	Comment     []string
+	Pos         Pos
 }
 
 // Paragraph is a paragraph of the procedure division: the tokens of its
@@ -524,6 +549,18 @@ func (p *Program) parseData(tokens []Token) error {
 				return err
 			}
 			p.FileSection = append(p.FileSection, fd)
+		case entry[0].Is("RD"):
+			if len(entry) < 2 {
+				return fmt.Errorf("%s: RD without a report name", entry[0].Pos)
+			}
+			if section != "REPORT" {
+				return fmt.Errorf("%s: RD outside the REPORT SECTION", entry[0].Pos)
+			}
+			rd, err := parseReportDescription(entry)
+			if err != nil {
+				return err
+			}
+			p.ReportSection = append(p.ReportSection, rd)
 		default:
 			if err := p.addDataEntry(section, entry); err != nil {
 				return err
@@ -555,6 +592,16 @@ func parseFileDescription(entry []Token) (FileDescription, error) {
 			c.passClause()
 		case clause.Is("BLOCK") || clause.Is("VALUE") || clause.Is("LINAGE") || clause.Is("CODE-SET") || clause.Is("IS"):
 			c.passClause()
+		case clause.Is("REPORT") || clause.Is("REPORTS"):
+			if !c.optional("IS") {
+				c.optional("ARE")
+			}
+			for !c.done() && (c.peek().Kind != Word || !fdClauses[c.peek().Text]) {
+				fd.Reports = append(fd.Reports, c.next().Text)
+			}
+			if len(fd.Reports) == 0 {
+				return FileDescription{}, fmt.Errorf("%s: %s %s: REPORT without a report name", clause.Pos, fd.Kind, fd.Name)
+			}
 		case clause.Is("EXTERNAL") || clause.Is("GLOBAL"):
 		default:
 			return FileDescription{}, fmt.Errorf("%s: %s %s: %s is not supported yet", clause.Pos, fd.Kind, fd.Name, clause)
@@ -566,7 +613,70 @@ func parseFileDescription(entry []Token) (FileDescription, error) {
 // fdClauses are the words that start a clause of an FD or SD entry.
 var fdClauses = map[string]bool{
 	"RECORD": true, "BLOCK": true, "LABEL": true, "VALUE": true, "DATA": true, "LINAGE": true,
-	"CODE-SET": true, "EXTERNAL": true, "GLOBAL": true,
+	"CODE-SET": true, "EXTERNAL": true, "GLOBAL": true, "REPORT": true, "REPORTS": true,
+}
+
+// parseReportDescription parses RD name and its clauses: CONTROL IS or
+// CONTROLS ARE and the control items, FINAL among them; PAGE [LIMIT IS] n
+// [LINES] and the line numbers HEADING, FIRST DETAIL, LAST DETAIL and
+// FOOTING, in any order; CODE and GLOBAL, which change nothing here.
+func parseReportDescription(entry []Token) (ReportDescription, error) {
+	rd := ReportDescription{Name: entry[1].Text, Comment: entry[0].Comment, Pos: entry[0].Pos}
+	c := &cursor{tokens: entry[2:]}
+	var err error
+	for !c.done() {
+		clause := c.next()
+		switch {
+		case clause.Is("CONTROL") || clause.Is("CONTROLS"):
+			if !c.optional("IS") {
+				c.optional("ARE")
+			}
+			for !c.done() && (c.peek().Kind != Word || !rdClauses[c.peek().Text]) {
+				rd.Controls = append(rd.Controls, c.qualified())
+			}
+		case clause.Is("PAGE"):
+			if !c.optional("LIMIT") {
+				c.optional("LIMITS")
+			}
+			if !c.optional("IS") {
+				c.optional("ARE")
+			}
+			if rd.PageLimit, err = c.number(); err != nil {
+				return ReportDescription{}, err
+			}
+			if !c.optional("LINE") {
+				c.optional("LINES")
+			}
+		case clause.Is("HEADING"):
+			rd.Heading, err = c.number()
+		case clause.Is("FIRST"):
+			if err = c.expect("DETAIL"); err == nil {
+				rd.FirstDetail, err = c.number()
+			}
+		case clause.Is("LAST"):
+			if err = c.expect("DETAIL"); err == nil {
+				rd.LastDetail, err = c.number()
+			}
+		case clause.Is("FOOTING"):
+			rd.Footing, err = c.number()
+		case clause.Is("IS") || clause.Is("GLOBAL"):
+		case clause.Is("CODE"):
+			c.optional("IS")
+			c.next()
+		default:
+			return ReportDescription{}, fmt.Errorf("%s: RD %s: %s is not supported yet", clause.Pos, rd.Name, clause)
+		}
+		if err != nil {
+			return ReportDescription{}, err
+		}
+	}
+	return rd, nil
+}
+
+// rdClauses are the words that start a clause of an RD entry.
+var rdClauses = map[string]bool{
+	"CONTROL": true, "CONTROLS": true, "PAGE": true, "HEADING": true, "FIRST": true, "LAST": true,
+	"FOOTING": true, "CODE": true, "GLOBAL": true, "IS": true,
 }
 
 // passClause passes over the rest of a clause of an FD or SD entry, up to
@@ -625,6 +735,12 @@ func (p *Program) addDataEntry(section string, tokens []Token) error {
 		p.WorkingStorage = append(p.WorkingStorage, entry)
 	case "LINKAGE":
 		p.Linkage = append(p.Linkage, entry)
+	case "REPORT":
+		if len(p.ReportSection) == 0 {
+			return fmt.Errorf("%s: report group before any RD", entry.Pos)
+		}
+		rd := &p.ReportSection[len(p.ReportSection)-1]
+		rd.Entries = append(rd.Entries, entry)
 	default:
 		return fmt.Errorf("%s: the %s SECTION is not supported yet", entry.Pos, section)
 	}
@@ -897,7 +1013,13 @@ func (c *cursor) number() (int, error) {
 
 // ReadDataEntries reads a copybook that holds data description entries.
 func ReadDataEntries(path string, copybookDirs []string) ([]*DataEntry, error) {
-	tokens, err := Read(path, copybookDirs)
+	return ReadDataEntriesIn(path, copybookDirs, "")
+}
+
+// ReadDataEntriesIn reads a copybook of data description entries in an
+// encoding, as ReadIn reads it.
+func ReadDataEntriesIn(path string, copybookDirs []string, encoding string) ([]*DataEntry, error) {
+	tokens, err := ReadIn(path, copybookDirs, encoding)
 	if err != nil {
 		return nil, err
 	}

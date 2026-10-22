@@ -34,6 +34,12 @@ var forms = []struct{ statement, want string }{
 `},
 	{"ADD WS-A TO WS-B GIVING WS-C", `ADD reads WS-A, WS-B writes WS-C
 `},
+	{"INITIATE PREMIUMS", `INITIATE reads PREMIUMS
+`},
+	{"GENERATE PREMIUM-DETAIL", `GENERATE reads PREMIUM-DETAIL
+`},
+	{"TERMINATE PREMIUMS", `TERMINATE reads PREMIUMS
+`},
 	{"SUBTRACT WS-A FROM WS-B GIVING WS-C", `SUBTRACT reads WS-A, WS-B writes WS-C
 `},
 	{"MULTIPLY WS-A BY WS-B GIVING WS-C ROUNDED", `MULTIPLY reads WS-A, WS-B writes WS-C

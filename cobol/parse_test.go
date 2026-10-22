@@ -140,7 +140,7 @@ func TestParseErrors(t *testing.T) {
 	for name, source := range map[string]string{
 		"FD without a name":     head + "       DATA DIVISION.\n       FILE SECTION.\n       FD.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
 		"a paragraph twice":     head + "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n       MAIN-PARA.\n           STOP RUN.\n",
-		"an FD clause not read": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD  IN-FILE REPORT IS SALES.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
+		"an FD clause not read": head + "       DATA DIVISION.\n       FILE SECTION.\n       FD  IN-FILE RECORDING MODE F.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n",
 	} {
 		tokens, err := Lex("test", []byte(source))
 		if err != nil {
@@ -695,5 +695,107 @@ func TestJapaneseProgram(t *testing.T) {
 	}
 	if para := p.Paragraphs[0]; para.Name != "\x8f\x88\x97\x9d" || para.Statements[0].Text != "MOVE N'\x93\xfa' TO \x8e\x81\x96\xbc" {
 		t.Errorf("paragraph %q, statement %q", para.Name, para.Statements[0].Text)
+	}
+}
+
+// A report of the Report Writer: the FD names it, the RD describes its
+// controls and page, and its groups are entries with a TYPE, lines and
+// columns, each printing a SOURCE item or a SUM of items.
+func TestParseReport(t *testing.T) {
+	source := `>>SOURCE FORMAT IS FREE
+IDENTIFICATION DIVISION.
+PROGRAM-ID. RWTEST.
+ENVIRONMENT DIVISION.
+INPUT-OUTPUT SECTION.
+FILE-CONTROL.
+    SELECT RPT ASSIGN TO "RPT" ORGANIZATION LINE SEQUENTIAL.
+DATA DIVISION.
+FILE SECTION.
+FD  RPT REPORT IS PREMIUMS.
+WORKING-STORAGE SECTION.
+01  WS-PRODUCT PIC X(2).
+01  WS-AMOUNT  PIC 9(7).
+01  WS-DATE    PIC X(7).
+REPORT SECTION.
+RD  PREMIUMS
+    CONTROLS ARE FINAL WS-PRODUCT
+    PAGE LIMIT IS 60 LINES HEADING 1 FIRST DETAIL 4 LAST DETAIL 56 FOOTING 58.
+01  TYPE IS PAGE HEADING.
+    05  LINE 1.
+        10  COLUMN 1  PIC X(12) VALUE "PREMIUMS DUE".
+        10  COLUMN 20 PIC X(7)  SOURCE WS-DATE.
+        10  COLUMN 70 PIC ZZ9   SOURCE PAGE-COUNTER.
+01  TYPE IS CONTROL HEADING WS-PRODUCT.
+    05  LINE PLUS 1.
+        10  COLUMN 1  PIC X(2)  SOURCE WS-PRODUCT.
+01  PREMIUM-DETAIL TYPE IS DETAIL.
+    05  LINE PLUS 1.
+        10  COLUMN 5  PIC Z,ZZZ,ZZ9 SOURCE WS-AMOUNT.
+01  TYPE IS CONTROL FOOTING WS-PRODUCT NEXT GROUP PLUS 1.
+    05  LINE PLUS 1.
+        10  COLUMN 5  PIC ZZ,ZZZ,ZZ9 SUM WS-AMOUNT.
+01  TYPE IS CF FINAL.
+    05  LINE PLUS 2.
+        10  COLUMN 5  PIC ZZZ,ZZZ,ZZ9 SUM WS-AMOUNT.
+PROCEDURE DIVISION.
+MAIN.
+    OPEN OUTPUT RPT
+    INITIATE PREMIUMS
+    GENERATE PREMIUM-DETAIL
+    TERMINATE PREMIUMS
+    CLOSE RPT
+    STOP RUN.
+`
+	tokens, err := Lex("RWTEST.cbl", []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Parse("RWTEST.cbl", tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.FileSection[0].Reports; !slices.Equal(got, []string{"PREMIUMS"}) || len(p.FileSection[0].Entries) != 0 {
+		t.Errorf("FD RPT reports %v with %d entries, want PREMIUMS and no records", got, len(p.FileSection[0].Entries))
+	}
+	if len(p.ReportSection) != 1 {
+		t.Fatalf("%d reports, want 1", len(p.ReportSection))
+	}
+	rd := p.ReportSection[0]
+	if rd.Name != "PREMIUMS" || !slices.Equal(rd.Controls, []string{"FINAL", "WS-PRODUCT"}) ||
+		rd.PageLimit != 60 || rd.Heading != 1 || rd.FirstDetail != 4 || rd.LastDetail != 56 || rd.Footing != 58 {
+		t.Errorf("RD %+v", rd)
+	}
+	var got []string
+	for _, e := range rd.Entries {
+		got = append(got, fmt.Sprintf("%02d %s %s %s %q %d %s %v", e.Level, e.Name, e.Type, e.TypeControl, e.Line, e.Column, e.Source, e.Sum))
+	}
+	want := []string{
+		`01 FILLER PAGE HEADING  "" 0  []`,
+		`05 FILLER   "1" 0  []`,
+		`10 FILLER   "" 1  []`,
+		`10 FILLER   "" 20 WS-DATE []`,
+		`10 FILLER   "" 70 PAGE-COUNTER []`,
+		`01 FILLER CONTROL HEADING WS-PRODUCT "" 0  []`,
+		`05 FILLER   "PLUS 1" 0  []`,
+		`10 FILLER   "" 1 WS-PRODUCT []`,
+		`01 PREMIUM-DETAIL DETAIL  "" 0  []`,
+		`05 FILLER   "PLUS 1" 0  []`,
+		`10 FILLER   "" 5 WS-AMOUNT []`,
+		`01 FILLER CONTROL FOOTING WS-PRODUCT "" 0  []`,
+		`05 FILLER   "PLUS 1" 0  []`,
+		`10 FILLER   "" 5  [WS-AMOUNT]`,
+		`01 FILLER CONTROL FOOTING FINAL "" 0  []`,
+		`05 FILLER   "PLUS 2" 0  []`,
+		`10 FILLER   "" 5  [WS-AMOUNT]`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("report groups\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	var verbs []string
+	for _, s := range p.Paragraphs[0].Statements {
+		verbs = append(verbs, s.Verb)
+	}
+	if want := []string{"OPEN", "INITIATE", "GENERATE", "TERMINATE", "CLOSE", "STOP"}; !slices.Equal(verbs, want) {
+		t.Errorf("statements %v, want %v", verbs, want)
 	}
 }

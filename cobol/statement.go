@@ -88,7 +88,7 @@ var verbs = map[string]bool{
 	"DELETE": true, "DISPLAY": true, "DIVIDE": true, "EVALUATE": true, "EXIT": true, "GO": true,
 	"GOBACK": true, "IF": true, "INITIALIZE": true, "INSPECT": true, "MERGE": true, "MOVE": true, "NEXT": true,
 	"MULTIPLY": true, "OPEN": true, "PERFORM": true, "READ": true, "RELEASE": true, "RETURN": true,
-	"ALTER": true, "CANCEL": true,
+	"ALTER": true, "CANCEL": true, "INITIATE": true, "GENERATE": true, "TERMINATE": true,
 	"REWRITE": true, "SEARCH": true, "SET": true, "SORT": true, "START": true, "STOP": true,
 	"STRING": true, "SUBTRACT": true, "UNSTRING": true, "WRITE": true,
 }
@@ -263,7 +263,10 @@ func (p *statementParser) statement() (Statement, error) {
 		err = p.start(&s)
 	case "CALL":
 		err = p.call(&s)
-	case "CANCEL":
+	case "CANCEL", "INITIATE", "GENERATE", "TERMINATE":
+		// The Report Writer's verbs name reports, or for GENERATE a
+		// report's detail group; what they read and write is the report
+		// description's business.
 		s.Reads, err = p.operands()
 	case "ALTER":
 		err = p.alter(&s)

@@ -4,6 +4,11 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- The Report Writer: `REPORT IS` on an FD, which then has no records of its own; the `REPORT SECTION` as `Program.ReportSection`, each `RD` a `ReportDescription` with its controls and page limits; its report groups as data entries with `Type`, `TypeControl`, `Line`, `Column`, `Source` and `Sum`; and `INITIATE`, `GENERATE` and `TERMINATE`, which read the report or group they name. NIST's six Report Writer programs read with it: 439 of 459.
+- `ReadDataEntriesIn`, a copybook of data description entries read in an encoding, as `ReadIn` reads source.
+
 ## [0.7.0] - 2026-10-20
 
 ### Added

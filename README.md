@@ -76,7 +76,7 @@ EOHIPPUS ELLA: -150.00
 
 | Package | Reads |
 | --- | --- |
-| [cobol/](cobol/) | Source in fixed format, or free after `>>SOURCE FORMAT IS FREE`; `COPY` with `REPLACING`, by words, qualified names, literals or pseudo-text; the divisions, file control and file descriptions, data description entries, and the statements of the procedure division, every token with the file and line it came from; `REPLACE`; and SPECIAL-NAMES' `DECIMAL-POINT IS COMMA` and `CURRENCY SIGN`, whose pictures and literals are kept in the standard form. A file of several programs, one after the other, with `ParseAll`, and programs nested in one. |
+| [cobol/](cobol/) | Source in fixed format, or free after `>>SOURCE FORMAT IS FREE`; `COPY` with `REPLACING`, by words, qualified names, literals or pseudo-text; the divisions, file control and file descriptions, data description entries, the Report Writer's report descriptions and groups, and the statements of the procedure division, every token with the file and line it came from; `REPLACE`; and SPECIAL-NAMES' `DECIMAL-POINT IS COMMA` and `CURRENCY SIGN`, whose pictures and literals are kept in the standard form. A file of several programs, one after the other, with `ParseAll`, and programs nested in one. |
 | [layout/](layout/) | Record layouts from data description entries, in a dialect: each field's position, length, picture, usage and category, `OCCURS` with `DEPENDING ON`, `REDEFINES`, `RENAMES`, `SIGN`, `SYNCHRONIZED`, and condition names. |
 | [record/](record/) | The fields of a record by name, through its layout: text, display numbers with their overpunched signs, packed decimal, binary, and floating point. |
 | [jcl/](jcl/) | Jobs, their steps and DD statements: datasets with generations, temporary datasets, concatenations, `SYSOUT`, `DUMMY`, in-stream data, `COND` tests and dispositions. |
@@ -104,8 +104,8 @@ IBM COBOL's slack bytes are as IBM documents them, with IBM's own example among 
 ## What it has been run against
 
 - **Two COBOL systems written for it**, in [Copal](https://github.com/vlumi/copal), which reads COBOL batch systems with it: a bank in IBM COBOL, fixed format and run by JCL, and a card processor in Micro Focus COBOL, free format and run by shell scripts. Every program of both is read and laid out, and both are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
-- **NIST's COBOL-85 test suite**, CCVS85: 433 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
-- **Its own tests**: tables of statement forms and of data description entries, the latter laid out in IBM and Micro Focus COBOL, each with what it reads as or the error it stops with. They cover 87% of the statements of `cobol`, 91% of `layout`, 89% of `record` and 93% of `jcl`.
+- **NIST's COBOL-85 test suite**, CCVS85: 439 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
+- **Its own tests**: tables of statement forms and of data description entries, the latter laid out in IBM and Micro Focus COBOL, each with what it reads as or the error it stops with. They cover 86% of the statements of `cobol`, 91% of `layout`, 89% of `record` and 93% of `jcl`.
 
 ## What it does not read yet
 
@@ -113,7 +113,7 @@ Each is an error that says so, with the file and line:
 
 - `USAGE POINTER`, whose size depends on the platform.
 - National items, `PIC N`, in IBM and Micro Focus COBOL, whose sizes are not verified yet; and a picture of `P` alone.
-- The report writer and the communication module.
+- The communication module.
 - Dialects other than IBM, Micro Focus, Hitachi and Fujitsu COBOL, and the additions of the 2002 and 2014 standards beyond those the two share; `EXEC SQL` and `EXEC CICS`.
 
 ## Acknowledgment

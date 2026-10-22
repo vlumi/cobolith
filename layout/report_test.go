@@ -60,21 +60,21 @@ MAIN.
 	for _, r := range laidOut.Files[0].Records {
 		got = append(got, fmt.Sprintf("%s %d bytes", r.Name, r.Length))
 		for _, c := range r.Children {
-			got = append(got, fmt.Sprintf("  %d-%d %s %s source %q sum %v", c.Start, c.Start+c.Length-1, c.Picture, c.Category, c.Source, c.Sum))
+			got = append(got, fmt.Sprintf("  %s %d-%d %s %s source %q sum %v", c.Name, c.Start, c.Start+c.Length-1, c.Picture, c.Category, c.Source, c.Sum))
 		}
 	}
 	want := []string{
 		"PAGE-HEADING-LINE-1 72 bytes",
-		`  1-12 X(12) alphanumeric source "" sum []`,
-		`  70-72 ZZ9 numeric-edited source "PAGE-COUNTER" sum []`,
+		`  PAGE-HEADING-LINE-1-COL-1 1-12 X(12) alphanumeric source "" sum []`,
+		`  PAGE-HEADING-LINE-1-COL-70 70-72 ZZ9 numeric-edited source "PAGE-COUNTER" sum []`,
 		"PAGE-HEADING-LINE-3 7 bytes",
-		`  1-7 X(7) alphanumeric source "" sum []`,
+		`  PAGE-HEADING-LINE-3-COL-1 1-7 X(7) alphanumeric source "" sum []`,
 		"PREMIUM-DETAIL 16 bytes",
-		`  1-2 X(2) alphanumeric source "WS-PRODUCT" sum []`,
-		`  5-13 Z,ZZZ,ZZ9 numeric-edited source "WS-AMOUNT" sum []`,
-		`  14-16 X(3) alphanumeric source "" sum []`,
+		`  PREMIUM-DETAIL-COL-1 1-2 X(2) alphanumeric source "WS-PRODUCT" sum []`,
+		`  PREMIUM-DETAIL-COL-5 5-13 Z,ZZZ,ZZ9 numeric-edited source "WS-AMOUNT" sum []`,
+		`  PREMIUM-DETAIL-COL-14 14-16 X(3) alphanumeric source "" sum []`,
 		"CONTROL-FOOTING-FINAL 15 bytes",
-		`  5-15 ZZZ,ZZZ,ZZ9 numeric-edited source "" sum [WS-AMOUNT]`,
+		`  CONTROL-FOOTING-FINAL-COL-5 5-15 ZZZ,ZZZ,ZZ9 numeric-edited source "" sum [WS-AMOUNT]`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("report lines\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

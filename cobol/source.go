@@ -129,6 +129,17 @@ func LexIn(file string, source []byte, encoding string) ([]Token, error) {
 	return transcode(l.tokens, encoding)
 }
 
+// ToUTF8 gives text that is in an encoding a source may be read in,
+// Shift_JIS or none, in UTF-8, as the lexer gives its tokens: for what
+// stands beside the source, such as the comments of the batch files that
+// run it.
+func ToUTF8(text, encoding string) (string, error) {
+	if encoding != ShiftJIS {
+		return text, nil
+	}
+	return japanese.ShiftJIS.NewDecoder().String(text)
+}
+
 // transcode gives the tokens' text and comments in UTF-8 when the source
 // was in another encoding.
 func transcode(tokens []Token, encoding string) ([]Token, error) {

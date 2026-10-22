@@ -4,6 +4,14 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- `cobol.ToUTF8` gives text in an encoding a source may be read in, Shift_JIS or none, in UTF-8, as the lexer gives its tokens: for what stands beside the source, such as the comments of the batch files that run it.
+
+### Fixed
+
+- The lines of a report group with more than one are numbered in order, `PAGE-HEADING-LINE-2`, rather than named after their `LINE` clauses, which two lines of one group may share.
+
 ## [0.8.0] - 2026-10-22
 
 ### Added

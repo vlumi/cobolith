@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-22
+
 ### Added
 
 - The Report Writer: `REPORT IS` on an FD, which then has no records of its own; the `REPORT SECTION` as `Program.ReportSection`, each `RD` a `ReportDescription` with its controls and page limits; its report groups as data entries with `Type`, `TypeControl`, `Line`, `Column`, `Source` and `Sum`; and `INITIATE`, `GENERATE` and `TERMINATE`, which read the report or group they name. NIST's six Report Writer programs read with it: 439 of 459.
@@ -88,7 +90,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/vlumi/cobolith/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vlumi/cobolith/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vlumi/cobolith/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vlumi/cobolith/compare/v0.4.0...v0.5.0

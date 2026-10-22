@@ -9,6 +9,7 @@ package cobol
 
 import (
 	"fmt"
+	"golang.org/x/text/encoding/japanese"
 	"strings"
 )
 
@@ -110,7 +111,10 @@ func Lex(file string, source []byte) ([]Token, error) {
 }
 
 // LexIn lexes source in an encoding, Shift_JIS or none: in Shift_JIS, a
-// two-byte character is kept whole, its second byte not upper-cased.
+// two-byte character is kept whole, its second byte not upper-cased, and
+// the tokens come out in UTF-8, their words, literals and comments
+// transcoded, so that what a program is called and says reads wherever it
+// goes; the file itself stays as it is.
 func LexIn(file string, source []byte, encoding string) ([]Token, error) {
 	l := &lexer{file: file, encoding: encoding}
 	for i, text := range strings.Split(string(source), "\n") {
@@ -122,7 +126,30 @@ func LexIn(file string, source []byte, encoding string) ([]Token, error) {
 		return nil, fmt.Errorf("%s: literal not closed", l.open.Pos)
 	}
 	l.endCommentEntry()
-	return l.tokens, nil
+	return transcode(l.tokens, encoding)
+}
+
+// transcode gives the tokens' text and comments in UTF-8 when the source
+// was in another encoding.
+func transcode(tokens []Token, encoding string) ([]Token, error) {
+	if encoding != ShiftJIS {
+		return tokens, nil
+	}
+	decoder := japanese.ShiftJIS.NewDecoder()
+	for i := range tokens {
+		t := &tokens[i]
+		text, err := decoder.String(t.Text)
+		if err != nil {
+			return nil, fmt.Errorf("%s: not Shift_JIS: %w", t.Pos, err)
+		}
+		t.Text = text
+		for j, line := range t.Comment {
+			if t.Comment[j], err = decoder.String(line); err != nil {
+				return nil, fmt.Errorf("%s: a comment that is not Shift_JIS: %w", t.Pos, err)
+			}
+		}
+	}
+	return tokens, nil
 }
 
 type lexer struct {

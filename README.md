@@ -103,9 +103,9 @@ IBM COBOL's slack bytes are as IBM documents them, with IBM's own example among 
 
 ## What it has been run against
 
-- **Two COBOL systems written for it**, in [Copal](https://github.com/vlumi/copal), which reads COBOL batch systems with it: a bank in IBM COBOL, fixed format and run by JCL, and a card processor in Micro Focus COBOL, free format and run by shell scripts. Every program of both is read and laid out, and both are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
+- **Three COBOL systems written for it**, in [Copal](https://github.com/vlumi/copal), which reads COBOL batch systems with it: a bank in IBM COBOL, fixed format and run by JCL; a card processor in Micro Focus COBOL, free format and run by shell scripts; and a life insurer in Fujitsu NetCOBOL, in Shift_JIS with Japanese names and the Report Writer, run by Windows batch files. Every program of the three is read and laid out, and all three are compiled and run with GnuCOBOL, so their layouts are checked against what a compiler made of them.
 - **NIST's COBOL-85 test suite**, CCVS85: 439 of its 459 programs are read and laid out. [conformance/](conformance/README.md) says how many of each module, and why each of the rest stops; `make conformance` fetches the suite and writes the report again.
-- **Its own tests**: tables of statement forms and of data description entries, the latter laid out in IBM and Micro Focus COBOL, each with what it reads as or the error it stops with. They cover 86% of the statements of `cobol`, 91% of `layout`, 89% of `record` and 93% of `jcl`.
+- **Its own tests**: tables of statement forms and of data description entries, the latter laid out in IBM and Micro Focus COBOL, each with what it reads as or the error it stops with. They cover 86% of the statements of `cobol`, 91% of `layout`, 89% of `record` and 93% of `jcl`. Fuzz tests of the lexer and the parser, the layouts and the record reading, and the JCL reader run with them, their corpus keeping the inputs that once made one panic.
 
 ## What it does not read yet
 

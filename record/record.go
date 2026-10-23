@@ -34,9 +34,10 @@ type Layout struct {
 }
 
 // FromCopybook reads the layout of the named record in a copybook, written
-// in the dialect.
+// in the dialect and in its encoding; the names are then in UTF-8, as the
+// lexer gives them.
 func FromCopybook(path string, copybookDirs []string, name string, dialect cobol.Dialect) (*Layout, error) {
-	entries, err := cobol.ReadDataEntries(path, copybookDirs)
+	entries, err := cobol.ReadDataEntriesIn(path, copybookDirs, dialect.Encoding)
 	if err != nil {
 		return nil, err
 	}

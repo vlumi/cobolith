@@ -370,7 +370,7 @@ func (p *Program) parseIdentification(tokens []Token) error {
 					break
 				}
 			}
-		case t.Kind == CommentEntry:
+		case t.Kind == CommentEntry && i >= 2:
 			p.Identification = append(p.Identification, IdentificationEntry{Paragraph: tokens[i-2].Text, Text: t.Text})
 		}
 	}

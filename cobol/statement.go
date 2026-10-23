@@ -174,9 +174,13 @@ func (p *statementParser) at(i int) Token {
 	return p.tokens[i]
 }
 
+// next consumes the next token; at the end of the tokens it stays there,
+// so that what is parsed so far can always be sliced.
 func (p *statementParser) next() Token {
 	t := p.peek()
-	p.i++
+	if !p.done() {
+		p.i++
+	}
 	return t
 }
 

@@ -185,8 +185,7 @@ func (l *lexer) line(lineNo int, text string) error {
 		return nil
 	}
 	if l.free {
-		l.freeLine(lineNo, text)
-		return nil
+		return l.freeLine(lineNo, text)
 	}
 	if strings.TrimSpace(text[min(len(text), indicatorColumn-1):min(len(text), lastColumn)]) == "" {
 		l.comment = nil
@@ -233,22 +232,27 @@ func sourceFormat(text string) (string, bool) {
 }
 
 // freeLine lexes a line of free-format source: a line that starts with *>
-// is a comment, and *> outside a literal ends the line's code.
-func (l *lexer) freeLine(lineNo int, text string) {
+// is a comment, and *> outside a literal ends the line's code. A literal
+// closes on its line, since free format has no continuation lines.
+func (l *lexer) freeLine(lineNo int, text string) error {
 	trimmed := strings.TrimSpace(text)
 	switch {
 	case trimmed == "":
 		l.comment = nil
-		return
+		return nil
 	case strings.HasPrefix(trimmed, "*>"):
 		l.comment = append(l.comment, strings.TrimSpace(strings.TrimPrefix(trimmed, "*>")))
-		return
+		return nil
 	}
 	body := []byte(text)
 	if end := inlineComment(body); end >= 0 {
 		body = body[:end]
 	}
 	l.scan(Pos{File: l.file, Line: lineNo}, body, 0)
+	if l.open != nil {
+		return fmt.Errorf("%s: literal not closed", l.open.Pos)
+	}
+	return nil
 }
 
 // inlineComment finds where a *> comment starts on a line, outside the
@@ -431,7 +435,8 @@ func (l *lexer) column(i int) int {
 }
 
 // literal reads an open literal from body[i:], up to its closing quote or,
-// if it does not close on this line, through column 72.
+// if it does not close on this line, through column 72 in fixed format,
+// where a continuation line may close it.
 func (l *lexer) literal(body []byte, i int) int {
 	for i < len(body) {
 		if body[i] == l.quote {
@@ -447,7 +452,9 @@ func (l *lexer) literal(body []byte, i int) int {
 		l.open.Text += string(body[i : i+1])
 		i++
 	}
-	l.open.Text += strings.Repeat(" ", lastColumn-indicatorColumn-len(body))
+	if !l.free {
+		l.open.Text += strings.Repeat(" ", lastColumn-indicatorColumn-len(body))
+	}
 	return i
 }
 

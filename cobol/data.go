@@ -87,6 +87,9 @@ var usages = map[string]string{
 // ParseDataEntry parses the tokens of one data description entry, without
 // its closing period.
 func ParseDataEntry(tokens []Token) (*DataEntry, error) {
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("a data description entry has no tokens")
+	}
 	c := &cursor{tokens: tokens}
 	level, err := c.number()
 	if err != nil {

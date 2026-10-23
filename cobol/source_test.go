@@ -255,3 +255,19 @@ func TestToUTF8(t *testing.T) {
 		t.Errorf("ToUTF8 of ASCII gave %q, %v", got, err)
 	}
 }
+
+// In free format a literal closes on its line, there being no continuation
+// lines: an unclosed one is an error, however long the line, where it was
+// once padded to column 72 as a fixed-format literal is.
+func TestFreeFormatLiteralMustClose(t *testing.T) {
+	for _, line := range []string{
+		"DISPLAY 'short",
+		"DISPLAY 'an unclosed literal on a line of well over sixty-five bytes, which is longer than area B'",
+		"DISPLAY \"an unclosed literal on a line of well over sixty-five bytes, which is longer than area B",
+	} {
+		_, err := Lex("x.cbl", []byte(">>SOURCE FORMAT FREE\n"+line+"\n"))
+		if (err == nil) != strings.HasSuffix(line, "'") || err != nil && !strings.Contains(err.Error(), "literal not closed") {
+			t.Errorf("%q: %v", line, err)
+		}
+	}
+}

@@ -4,6 +4,11 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Fixed
+
+- A quoted literal left unclosed on a free-format line is a "literal not closed" error, where a line longer than 65 bytes made the lexer panic padding the literal to column 72, which only a fixed-format literal, continued on the next line, needs.
+- `ParseDataEntry` of no tokens, an identification comment entry with nothing before it, and a statement cut short at the end of its tokens, `READ` with no file, are errors and nothing, not panics. Fuzz tests of the lexer, the parser, the layouts, the record reading and the JCL reader guard against the next ones.
+
 ## [0.8.2] - 2026-10-23
 
 ### Fixed

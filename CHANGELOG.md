@@ -4,6 +4,10 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Fixed
+
+- `record.FromCopybook` reads the copybook in the dialect's encoding, so the fields of a Shift_JIS copybook are found by their names in UTF-8, as a program's are.
+
 ## [0.8.1] - 2026-10-22
 
 ### Added

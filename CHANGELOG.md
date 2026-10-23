@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-23
+
 ### Fixed
 
 - A quoted literal left unclosed on a free-format line is a "literal not closed" error, where a line longer than 65 bytes made the lexer panic padding the literal to column 72, which only a fixed-format literal, continued on the next line, needs.
@@ -111,7 +113,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/vlumi/cobolith/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/vlumi/cobolith/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/vlumi/cobolith/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/vlumi/cobolith/compare/v0.7.0...v0.8.0

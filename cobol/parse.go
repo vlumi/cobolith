@@ -61,7 +61,10 @@ type IdentificationEntry struct {
 // FileControl is a SELECT entry: a file and the external name it is
 // assigned to.
 type FileControl struct {
-	Name         string
+	Name string
+	// Optional is whether the file need not be there when the program
+	// opens it, as SELECT OPTIONAL says.
+	Optional     bool
 	Assign       string
 	Organization string
 	Access       string // SEQUENTIAL, RANDOM or DYNAMIC
@@ -463,8 +466,8 @@ func swapPoint(r rune) rune {
 func parseSelect(entry []Token) (FileControl, error) {
 	c := &cursor{tokens: entry}
 	c.next()
-	c.optional("OPTIONAL")
-	file := FileControl{Name: c.next().Text, Organization: "SEQUENTIAL", Access: "SEQUENTIAL", Pos: entry[0].Pos}
+	optional := c.optional("OPTIONAL")
+	file := FileControl{Name: c.next().Text, Optional: optional, Organization: "SEQUENTIAL", Access: "SEQUENTIAL", Pos: entry[0].Pos}
 	for !c.done() {
 		clause := c.next()
 		switch {

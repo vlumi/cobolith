@@ -4,6 +4,8 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-26
+
 ### Added
 
 - `FileControl.Optional` says whether a file is declared `SELECT OPTIONAL`, one that need not be there when the program opens it; the word was read and passed over.
@@ -117,7 +119,8 @@ The first release, a library of its own.
 - `jcl`: jobs, their steps and DD statements, with generations, temporary datasets, concatenations, `COND` tests and dispositions.
 - `conformance`: a command that reads NIST's COBOL-85 test suite, CCVS85, and reports what it reads, by module, and why the rest stops: 383 of its 459 programs.
 
-[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/vlumi/cobolith/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/vlumi/cobolith/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/vlumi/cobolith/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/vlumi/cobolith/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/vlumi/cobolith/compare/v0.8.0...v0.8.1

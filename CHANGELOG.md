@@ -4,6 +4,10 @@ What changes in each release, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+
+- `FileControl.Optional` says whether a file is declared `SELECT OPTIONAL`, one that need not be there when the program opens it; the word was read and passed over.
+
 ## [0.8.3] - 2026-10-23
 
 ### Fixed

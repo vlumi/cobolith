@@ -56,7 +56,7 @@ func TestReadProgram(t *testing.T) {
 		Name: "HOLD-FILE", Assign: "HOLDIN", Organization: "LINE SEQUENTIAL", Access: "SEQUENTIAL", Status: "WS-STATUS",
 		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 9, Col: 12},
 	}, {
-		Name: "KEYED-FILE", Assign: "KEYED", Organization: "INDEXED", Access: "DYNAMIC", RecordKey: "KEYED-ID", Status: "WS-STATUS",
+		Name: "KEYED-FILE", Optional: true, Assign: "KEYED", Organization: "INDEXED", Access: "DYNAMIC", RecordKey: "KEYED-ID", Status: "WS-STATUS",
 		Pos: Pos{File: "testdata/program/SAMPLE.cbl", Line: 12, Col: 12},
 	}}
 	if !reflect.DeepEqual(p.Files, wantFiles) {
